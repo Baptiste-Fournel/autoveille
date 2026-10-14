@@ -28,6 +28,7 @@ const ICONS = {
   chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2.5-8h13L21 13v6H3z"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/></svg>',
   open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
   logo: '<svg viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="8" fill="#1F5E3C"/><path d="M8 19l2.2-5.2A2 2 0 0 1 12 12.5h8a2 2 0 0 1 1.8 1.2L24 19" stroke="#F2C94C" stroke-width="2" stroke-linecap="round"/><path d="M6.5 19h19v4h-2.2a1.8 1.8 0 0 1-3.6 0h-7.4a1.8 1.8 0 0 1-3.6 0H6.5z" fill="#F2C94C"/></svg>',
 };
 const svg = (name, cls) => { const s = el('span', { class: cls || '', html: ICONS[name] }); return s.firstChild; };
@@ -62,6 +63,9 @@ const fmt = {
   },
   plural: (n, s, p) => `${fmt.int(n)} ${n > 1 ? p : s}`,
 };
+
+/** Like node.append, but skips null/false (the native append would write the text "null"). */
+const append = (node, ...children) => { for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c); return node; };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
@@ -99,7 +103,7 @@ async function render() {
   if (!state.me.authenticated) { $app.append(renderLogin()); return; }
   const route = currentRoute();
   state.route = route.name;
-  const views = { annonces: renderAnnonces, reglages: renderReglages, messages: renderMessages, sources: renderSources, annonce: renderAnnonces };
+  const views = { annonces: renderAnnonces, reglages: renderReglages, messages: renderMessages, sources: renderSources, annonce: renderAnnonceDetail, rafale: renderRafale };
   const view = views[route.name] || renderAnnonces;
   $app.append(renderShell(await view(route)));
 }
@@ -112,7 +116,7 @@ function navLinks() {
     ['messages', 'Messages', 'chat'],
     ['sources', 'Sources', 'inbox'],
   ];
-  const active = state.route === 'annonce' ? 'annonces' : state.route;
+  const active = state.route === 'annonce' || state.route === 'rafale' ? 'annonces' : state.route;
   const top = el('nav', { class: 'nav', 'aria-label': 'Navigation' }, items.map(([r, label, , count]) =>
     el('a', { href: `#/${r}`, 'aria-current': active === r ? 'page' : null }, label, count ? el('span', { class: 'badge count' }, count) : null)));
   const bottom = el('nav', { class: 'tabbar', 'aria-label': 'Navigation' }, items.map(([r, label, icon, count]) =>
@@ -132,20 +136,21 @@ function renderShell(content) {
 // ---------- connexion ----------
 function renderLogin() {
   const setup = state.me.needsSetup;
+  const needCode = setup && state.me.setupCodeRequired !== false;
   const form = el('form', { class: 'card', onsubmit: async (e) => {
     e.preventDefault();
     const fd = new FormData(form);
     try {
-      if (setup) await api('POST', '/api/setup', { setupCode: fd.get('code'), password: fd.get('password') });
+      if (setup) await api('POST', '/api/setup', { setupCode: fd.get('code') || '', password: fd.get('password') });
       else await api('POST', '/api/login', { password: fd.get('password') });
       state.me = null; location.hash = '#/annonces'; await render();
     } catch (err) { toast(err.message, true); }
   } },
     el('div', { class: 'brand' }, svg('logo'), 'AutoVeille'),
     setup
-      ? el('p', { class: 'muted' }, 'Première connexion. Saisissez le code fourni à l’installation, puis choisissez le mot de passe qui servira ensuite à ouvrir l’application.')
+      ? el('p', { class: 'muted' }, needCode ? 'Première connexion. Saisissez le code fourni à l’installation, puis choisissez le mot de passe qui servira ensuite à ouvrir l’application.' : 'Première connexion. Choisissez le mot de passe qui servira ensuite à ouvrir l’application.')
       : el('p', { class: 'muted' }, 'Les nouvelles annonces qui vous intéressent, avec le message prêt à envoyer.'),
-    setup ? el('div', { class: 'field' }, el('label', { for: 'code' }, 'Code de première connexion'), el('input', { class: 'input', id: 'code', name: 'code', autocomplete: 'off', required: true })) : null,
+    needCode ? el('div', { class: 'field' }, el('label', { for: 'code' }, 'Code de première connexion'), el('input', { class: 'input', id: 'code', name: 'code', autocomplete: 'off', required: true })) : null,
     el('div', { class: 'field' }, el('label', { for: 'password' }, setup ? 'Nouveau mot de passe (8 caractères minimum)' : 'Mot de passe'), el('input', { class: 'input', id: 'password', name: 'password', type: 'password', autocomplete: setup ? 'new-password' : 'current-password', required: true, minlength: setup ? 8 : 1 })),
     el('button', { class: 'btn primary big', type: 'submit' }, setup ? 'Commencer' : 'Se connecter'),
   );
@@ -155,8 +160,7 @@ function renderLogin() {
 // ---------- écran Annonces ----------
 async function loadOverview() { state.overview = await api('GET', '/api/overview'); }
 
-async function renderAnnonces(route) {
-  if (route?.name === 'annonce' && route.arg) state.filter = 'tous';
+async function renderAnnonces() {
   const [ov, data] = await Promise.all([api('GET', '/api/overview'), api('GET', `/api/vehicles?status=${state.filter}`)]);
   state.overview = ov; state.vehicles = data.vehicles;
   const c = ov.counts;
@@ -166,7 +170,10 @@ async function renderAnnonces(route) {
   const head = el('div', { class: 'headline' },
     el('h1', {}, state.filter === 'nouveau' ? (c.nouveau ? `${fmt.plural(c.nouveau, 'annonce à traiter', 'annonces à traiter')}` : 'Rien à traiter pour le moment') : filters.find((f) => f[0] === state.filter)[1]),
     el('p', { class: 'muted' }, `${ov.zone.city}, ${ov.zone.radiusKm} km`, lastRun?.last_run_at ? ` · boîte mail vérifiée ${fmt.ago(lastRun.last_run_at)}` : (ov.imapConfigured ? '' : ' · boîte mail pas encore reliée')),
+    state.filter === 'nouveau' && c.nouveau >= 2 ? el('a', { class: 'btn primary rafale-cta', href: '#/rafale' }, svg('bolt'), `Traiter en rafale (${c.nouveau})`) : null,
   );
+  const dealerMissing = !ov.dealer?.firstName || !ov.dealer?.phone;
+  const setupNote = dealerMissing ? el('a', { class: 'note warn link', href: '#/reglages' }, 'Vos coordonnées ne sont pas encore renseignées : les messages partiraient sans votre nom ni votre téléphone. Les saisir dans Réglages →') : null;
   const bar = el('div', { class: 'filterbar', role: 'tablist' }, filters.map(([key, label, count]) =>
     el('button', { class: 'chip', role: 'tab', 'aria-pressed': state.filter === key, onclick: () => { state.filter = key; render(); } }, label, count ? el('span', { class: 'badge count' }, count) : null)));
 
@@ -180,11 +187,8 @@ async function renderAnnonces(route) {
   } else {
     for (const v of state.vehicles) list.append(renderVehicle(v));
   }
-  setTimeout(() => {
-    if (route?.name === 'annonce' && route.arg) document.getElementById(`v-${route.arg}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    document.querySelectorAll('.message textarea').forEach(autosize);
-  }, 0);
-  return [head, bar, list];
+  setTimeout(() => document.querySelectorAll('.message textarea').forEach(autosize), 0);
+  return [head, setupNote, bar, list];
 }
 
 function autosize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; }
@@ -200,8 +204,7 @@ function messageBlock(ta) {
   return box;
 }
 
-function renderVehicle(v) {
-  const card = el('article', { class: 'card listing', id: `v-${v.id}` });
+function vehicleBadges(v) {
   const badges = [];
   if (v.status === 'nouveau' && v.matched) badges.push(el('span', { class: 'badge new' }, 'Nouveau'));
   if (v.priceDropped) badges.push(el('span', { class: 'badge ok' }, 'Prix baissé'));
@@ -211,10 +214,20 @@ function renderVehicle(v) {
   if (v.sellerType === 'pro') badges.push(el('span', { class: 'badge warn' }, 'Vendeur pro'));
   if (v.doNotContact) badges.push(el('span', { class: 'badge warn' }, 'Ne plus contacter'));
   if (v.messageEdited) badges.push(el('span', { class: 'badge' }, 'Message modifié'));
+  return badges;
+}
 
-  const thumb = v.imageUrl ? el('img', { class: 'thumb', src: v.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : el('div', { class: 'thumb empty' }, svg('car'));
-  const where = [v.city, v.distanceKm !== null ? `à ${v.distanceKm} km` : null].filter(Boolean).join(', ');
+const whereText = (v) => [v.city, v.distanceKm !== null ? `à ${v.distanceKm} km` : null].filter(Boolean).join(', ');
 
+function specsBlock(v) {
+  return el('div', { class: 'specs' },
+    el('div', {}, el('b', {}, v.year || '–'), el('span', {}, 'année')),
+    el('div', {}, el('b', {}, v.km !== null ? fmt.int(v.km) : '–'), el('span', {}, 'km')),
+    el('div', {}, el('b', {}, v.price !== null ? fmt.int(v.price) + ' €' : '–'), el('span', {}, v.listings[0]?.priceHistory?.length > 1 ? 'prix (baissé)' : 'prix')));
+}
+
+/** The editable message; saved on blur when it changed. */
+function messageTextarea(v) {
   const ta = el('textarea', { rows: 4, 'aria-label': 'Message à envoyer', spellcheck: true }, v.message);
   ta.addEventListener('input', () => autosize(ta));
   ta.addEventListener('blur', async () => {
@@ -222,23 +235,37 @@ function renderVehicle(v) {
     try { const r = await api('POST', `/api/vehicles/${v.id}`, { message: ta.value }); v.message = r.message; v.messageEdited = r.messageEdited; toast('Message enregistré'); }
     catch (err) { toast(err.message, true); }
   });
+  return ta;
+}
 
+/** Opens the listing (on a phone installed as an app, in a panel over the app) and puts the message in the clipboard. */
+async function openAndCopy(v, text) {
+  const w = window.open(v.url, '_blank', 'noopener');
+  let copied = true;
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    try { const t = el('textarea', { style: 'position:fixed;opacity:0', value: text }); document.body.append(t); t.select(); copied = document.execCommand('copy'); t.remove(); } catch { copied = false; }
+  }
+  if (!w) toast('Le navigateur a bloqué l’ouverture de l’annonce : ouvrez-la avec le lien « Voir l’annonce ».', true);
+  else toast(copied ? 'Message copié : collez-le dans le formulaire de contact de l’annonce.' : 'Annonce ouverte. Copiez le message à la main.');
+  return Boolean(w);
+}
+
+/**
+ * Action buttons for a vehicle. `afterUpdate(patch)` runs once the server has applied a change
+ * (the list re-renders, the detail goes back, the burst mode moves on).
+ */
+function vehicleActions(v, ta, { afterUpdate, inBurst = false } = {}) {
   const actions = el('div', { class: 'actions' });
   const update = async (patch, msg) => {
-    try { await api('POST', `/api/vehicles/${v.id}`, patch); if (msg) toast(msg); await render(); }
+    try { await api('POST', `/api/vehicles/${v.id}`, patch); if (msg) toast(msg); await afterUpdate(patch); }
     catch (err) { toast(err.message, true); }
   };
-
-  const openAndCopy = async () => {
-    const w = window.open(v.url, '_blank', 'noopener');
-    try { await navigator.clipboard.writeText(ta.value); toast('Message copié : collez-le dans le formulaire de contact de l’annonce.'); }
-    catch { ta.focus(); ta.select(); document.execCommand('copy'); toast('Message copié.'); }
-    if (!w) toast('Le navigateur a bloqué l’ouverture de l’annonce : ouvrez-la avec le lien.', true);
-    confirmBox.classList.remove('hidden');
-  };
   const confirmBox = el('div', { class: 'confirm hidden' }, el('b', {}, 'Message envoyé au vendeur ?'),
-    el('button', { class: 'btn primary small', onclick: () => update({ status: 'contacte' }, 'Passée en « contactée »') }, 'Oui, envoyé'),
-    el('button', { class: 'btn small', onclick: () => confirmBox.classList.add('hidden') }, 'Pas maintenant'));
+    el('button', { class: 'btn primary small', onclick: () => update({ status: 'contacte' }, inBurst ? 'Envoyée, à la suivante' : 'Passée en « contactée »') }, inBurst ? 'Oui, envoyé, suivante' : 'Oui, envoyé'),
+    inBurst ? el('button', { class: 'btn small', onclick: () => update({ status: 'ignore' }, 'Annonce ignorée') }, 'Non, ignorer') : null,
+    el('button', { class: 'btn small quiet', onclick: () => { confirmBox.classList.add('hidden'); if (inBurst) afterUpdate({ skip: true }); } }, inBurst ? 'Passer' : 'Pas maintenant'));
+  const main = el('button', { class: 'btn primary big', onclick: async () => { await openAndCopy(v, ta ? ta.value : v.message); confirmBox.classList.remove('hidden'); confirmBox.scrollIntoView({ block: 'nearest' }); } }, svg('open'), 'Ouvrir l’annonce et copier le message');
 
   if (!v.matched) {
     actions.append(el('ul', { class: 'reasons' }, v.reasons.map((r) => el('li', {}, r))),
@@ -246,11 +273,12 @@ function renderVehicle(v) {
         el('a', { class: 'btn', href: v.url, target: '_blank', rel: 'noopener' }, svg('open'), 'Voir l’annonce'),
         el('button', { class: 'btn', onclick: () => update({ keep: true, status: 'nouveau' }, 'Annonce gardée') }, 'Garder quand même')));
   } else if (v.status === 'nouveau') {
-    actions.append(el('button', { class: 'btn primary big', onclick: openAndCopy }, svg('open'), 'Ouvrir l’annonce et copier le message'), confirmBox,
+    actions.append(main, confirmBox,
       el('div', { class: 'secondary' },
         el('button', { class: 'btn quiet', onclick: () => update({ status: 'contacte' }, 'Passée en « contactée »') }, 'Déjà contacté'),
         el('button', { class: 'btn quiet', onclick: () => update({ status: 'ignore' }, 'Annonce ignorée') }, 'Ignorer'),
-        el('button', { class: 'btn quiet danger', onclick: () => update({ doNotContact: true }, 'Vendeur ajouté à la liste « ne plus contacter »') }, 'Ne plus contacter')));
+        el('button', { class: 'btn quiet danger', onclick: () => update({ doNotContact: true }, 'Vendeur ajouté à la liste « ne plus contacter »') }, 'Ne plus contacter'),
+        inBurst ? el('button', { class: 'btn quiet', onclick: () => afterUpdate({ skip: true }) }, 'Passer') : null));
   } else if (v.status === 'contacte') {
     actions.append(el('div', { class: 'secondary' },
       el('a', { class: 'btn', href: v.url, target: '_blank', rel: 'noopener' }, svg('open'), 'Revoir l’annonce'),
@@ -262,18 +290,113 @@ function renderVehicle(v) {
       v.status === 'repondu' ? el('button', { class: 'btn quiet', onclick: () => update({ status: 'ignore' }, 'Annonce classée') }, 'Classer') : null,
       !v.doNotContact ? el('button', { class: 'btn quiet', onclick: () => update({ status: 'nouveau' }, 'Remise à traiter') }, 'Remettre à traiter') : null));
   }
+  return { actions, showConfirm: () => confirmBox.classList.remove('hidden') };
+}
 
-  card.append(
-    el('div', { class: 'head' }, thumb, el('div', { class: 'title' }, el('h3', { title: v.title }, v.name), el('span', { class: 'sub' }, v.title !== v.name ? v.title : ''), el('span', { class: 'sub' }, [where, v.siteLabel, fmt.ago(v.firstSeenAt)].filter(Boolean).join(' · ')))),
-    el('div', { class: 'specs' },
-      el('div', {}, el('b', {}, v.year || '–'), el('span', {}, 'année')),
-      el('div', {}, el('b', {}, v.km !== null ? fmt.int(v.km) : '–'), el('span', {}, 'km')),
-      el('div', {}, el('b', {}, v.price !== null ? fmt.int(v.price) + ' €' : '–'), el('span', {}, v.listings[0]?.priceHistory?.length > 1 ? 'prix (baissé)' : 'prix'))),
+/** Compact card in the list. The photo and the title open the full view. */
+function renderVehicle(v) {
+  const card = el('article', { class: 'card listing', id: `v-${v.id}` });
+  const badges = vehicleBadges(v);
+  const thumb = v.imageUrl ? el('img', { class: 'thumb', src: v.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : el('div', { class: 'thumb empty' }, svg('car'));
+  const ta = messageTextarea(v);
+  const { actions } = vehicleActions(v, ta, { afterUpdate: () => render() });
+  const link = (...children) => el('a', { class: 'plain', href: `#/annonce/${v.id}`, 'aria-label': `Voir la fiche : ${v.name}` }, ...children);
+
+  append(card,
+    el('div', { class: 'head' }, link(thumb), el('div', { class: 'title' }, el('h3', { title: v.title }, link(v.name)), el('span', { class: 'sub' }, v.title !== v.name ? v.title : ''), el('span', { class: 'sub' }, [whereText(v), v.siteLabel, fmt.ago(v.firstSeenAt)].filter(Boolean).join(' · ')))),
+    specsBlock(v),
     badges.length ? el('div', { class: 'badges' }, badges) : null,
     v.matched && v.status === 'nouveau' ? messageBlock(ta) : null,
     actions,
   );
   return card;
+}
+
+/** Full view of one vehicle: photo, details, the listing text as received, the message, the actions. */
+function vehicleSheet(v, { afterUpdate, inBurst = false }) {
+  const sheet = el('article', { class: 'card listing detail', id: `v-${v.id}` });
+  const badges = vehicleBadges(v);
+  const photo = v.imageUrl ? el('a', { class: 'photo', href: v.url, target: '_blank', rel: 'noopener' }, el('img', { src: v.imageUrl, alt: v.title, referrerpolicy: 'no-referrer' })) : el('div', { class: 'photo empty' }, svg('car'));
+  const ta = messageTextarea(v);
+  const { actions, showConfirm } = vehicleActions(v, ta, { afterUpdate, inBurst });
+  const siteLine = el('div', { class: 'sub' }, [whereText(v), `${v.siteLabel} · ${fmt.ago(v.firstSeenAt)}`].filter(Boolean).join(' · '));
+  const others = v.listings.length > 1 ? el('div', { class: 'others' }, 'Aussi sur ', v.listings.slice(1).map((l, i) => [i ? ', ' : '', el('a', { href: l.url, target: '_blank', rel: 'noopener' }, l.siteLabel)])) : null;
+  const desc = v.description ? el('details', { class: 'adv desc', open: !inBurst }, el('summary', {}, 'Texte de l’annonce tel que reçu'), el('p', { class: 'desc-text' }, v.description)) : null;
+
+  const message = v.matched && v.status === 'nouveau'
+    ? (inBurst ? messageBlock(ta) : el('div', { class: 'message open' }, el('div', { class: 'ta-wrap' }, ta), el('span', { class: 'hint' }, 'Le message proposé, modifiable. Il est copié tel quel.')))
+    : null;
+  // In burst mode the button comes first and the message stays folded: one tap, then paste.
+  append(sheet,
+    photo,
+    el('div', { class: 'dhead' }, el('h2', {}, v.name), v.title !== v.name ? el('p', { class: 'muted' }, v.title) : null, siteLine, others),
+    specsBlock(v),
+    badges.length ? el('div', { class: 'badges' }, badges) : null,
+    inBurst ? actions : message,
+    inBurst ? message : null,
+    desc,
+    inBurst ? null : actions,
+  );
+  setTimeout(() => autosize(ta), 0);
+  return { sheet, showConfirm };
+}
+
+async function renderAnnonceDetail(route) {
+  const id = Number(route.arg);
+  let v;
+  try { v = await api('GET', `/api/vehicles/${id}`); }
+  catch (err) { return el('div', { class: 'empty' }, el('b', {}, 'Annonce introuvable'), el('a', { class: 'btn', href: '#/annonces' }, 'Retour aux annonces')); }
+  const back = el('a', { class: 'btn quiet back', href: '#/annonces' }, '← Annonces');
+  const { sheet } = vehicleSheet(v, { afterUpdate: async () => { location.hash = '#/annonces'; } });
+  return [back, sheet];
+}
+
+// ---------- mode rafale ----------
+/** Vehicles to process, one after the other, with the confirmation shown when the person comes back to the app. */
+async function renderRafale() {
+  const data = await api('GET', '/api/vehicles?status=nouveau');
+  const queue = data.vehicles.filter((v) => v.matched && !v.doNotContact);
+  const r = state.rafale && state.rafale.ids.length ? state.rafale : (state.rafale = { ids: queue.map((v) => v.id), index: 0, sent: 0, ignored: 0, skipped: 0 });
+  // Vehicles handled elsewhere in the meantime disappear from the queue.
+  const stillThere = new Set(queue.map((v) => v.id));
+  r.ids = r.ids.filter((id) => stillThere.has(id));
+  if (r.index > r.ids.length) r.index = r.ids.length;
+
+  const box = el('div', { class: 'stack' });
+  const stop = () => { state.rafale = null; location.hash = '#/annonces'; };
+
+  const draw = () => {
+    box.replaceChildren();
+    if (!r.ids.length || r.index >= r.ids.length) {
+      const total = r.sent + r.ignored + r.skipped;
+      box.append(el('div', { class: 'empty' }, svg('bolt'),
+        el('b', {}, total ? 'Rafale terminée' : 'Rien à traiter'),
+        el('p', {}, total ? `${fmt.plural(r.sent, 'message envoyé', 'messages envoyés')}, ${fmt.plural(r.ignored, 'annonce ignorée', 'annonces ignorées')}${r.skipped ? `, ${fmt.plural(r.skipped, 'passée', 'passées')}` : ''}.` : 'Toutes les annonces sont traitées.'),
+        el('button', { class: 'btn primary', onclick: stop }, 'Retour aux annonces')));
+      return;
+    }
+    const v = queue.find((x) => x.id === r.ids[r.index]);
+    const progress = el('div', { class: 'progress' },
+      el('div', { class: 'row between' }, el('b', {}, `${r.index + 1} sur ${r.ids.length}`), el('button', { class: 'btn quiet small', onclick: stop }, 'Arrêter')),
+      el('div', { class: 'bar' }, el('div', { class: 'fill', style: `width:${Math.round((r.index / r.ids.length) * 100)}%` })));
+    const { sheet, showConfirm } = vehicleSheet(v, {
+      inBurst: true,
+      afterUpdate: async (patch) => {
+        if (patch.skip) r.skipped++;
+        else if (patch.status === 'contacte') r.sent++;
+        else if (patch.status === 'ignore' || patch.doNotContact) r.ignored++;
+        r.index++;
+        window.scrollTo({ top: 0 });
+        draw();
+      },
+    });
+    // When the person comes back from the listing, the question is already on screen.
+    const onBack = () => { if (document.visibilityState === 'visible') showConfirm(); };
+    document.addEventListener('visibilitychange', onBack, { once: true });
+    box.append(progress, sheet);
+  };
+  draw();
+  return [el('div', { class: 'headline' }, el('h1', {}, 'Mode rafale'), el('p', { class: 'muted' }, 'Une annonce à la fois : ouvrir, coller le message, envoyer, revenir. Chaque envoi reste le vôtre.')), box];
 }
 
 // ---------- écran Réglages ----------
@@ -335,9 +458,9 @@ async function renderReglages() {
   // Concession
   const dealer = el('section', { class: 'card section' }, el('h2', {}, 'Vous'),
     el('p', { class: 'muted small' }, 'Ces informations remplissent automatiquement les messages.'),
-    el('div', { class: 'grid2' }, field('Prénom', text(d.dealer, 'firstName', { autocomplete: 'given-name' })), field('Nom', text(d.dealer, 'lastName', { autocomplete: 'family-name' }))),
-    el('div', { class: 'grid2' }, field('Concession', text(d.dealer, 'company')), field('Ville de la concession', text(d.dealer, 'city'))),
-    field('Téléphone', text(d.dealer, 'phone', { type: 'tel', inputmode: 'tel' }), 'Il figure dans chaque message : c’est ce qui permet au vendeur de vous joindre.'));
+    el('div', { class: 'grid2' }, field('Prénom', text(d.dealer, 'firstName', { autocomplete: 'given-name', placeholder: 'Votre prénom' })), field('Nom', text(d.dealer, 'lastName', { autocomplete: 'family-name', placeholder: 'Votre nom' }))),
+    el('div', { class: 'grid2' }, field('Concession', text(d.dealer, 'company', { placeholder: 'Nom de la concession' })), field('Ville de la concession', text(d.dealer, 'city', { placeholder: 'Bordeaux' }))),
+    field('Téléphone', text(d.dealer, 'phone', { type: 'tel', inputmode: 'tel', placeholder: '06 12 34 56 78' }), 'Il figure dans chaque message : c’est ce qui permet au vendeur de vous joindre.'));
 
   // Zone
   const radiusLabel = el('b', {}, `${d.zone.radiusKm} km`);

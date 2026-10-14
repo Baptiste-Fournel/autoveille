@@ -177,13 +177,14 @@ textarea.input { resize: vertical; line-height: 1.5; min-height: 120px; }
 .note { background: var(--info-soft); border-radius: var(--radius-s); padding: 10px 12px; font-size: 14.5px; color: var(--ink-2); }
 .note.warn { background: var(--danger-soft); color: var(--danger); }
 .note.ok { background: var(--accent-soft); color: var(--accent); }
+a.note.link { display: block; text-decoration: none; font-weight: 500; }
 
 /* ---------- listing card ---------- */
 .listing { display: flex; flex-direction: column; gap: 12px; padding: 0; overflow: hidden; }
 .listing .head { display: flex; gap: 14px; padding: 14px 16px 0; }
 .listing .thumb { width: 96px; height: 72px; flex: 0 0 auto; border-radius: 8px; object-fit: cover; background: var(--paper); border: 1px solid var(--line); }
 .listing .thumb.empty { display: flex; align-items: center; justify-content: center; color: var(--muted); }
-.listing .thumb.empty svg { width: 28px; height: 28px; }
+.listing .thumb.empty svg { width: 28px; height: 28px; flex: 0 0 auto; }
 .listing .title { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .listing .title h3 { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .listing .title .sub { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -208,6 +209,28 @@ textarea.input { resize: vertical; line-height: 1.5; min-height: 120px; }
 .confirm b { flex: 1 1 auto; }
 .reasons { margin: 0 16px; font-size: 14px; color: var(--ink-2); }
 .reasons li { margin: 2px 0; }
+
+.listing a.plain { color: inherit; text-decoration: none; }
+.listing a.plain:hover h3, .listing .title h3 a.plain:hover { text-decoration: underline; }
+.headline .rafale-cta { align-self: flex-start; margin-top: 8px; }
+
+/* ---------- full view of one listing (fiche, mode rafale) ---------- */
+.back { align-self: flex-start; margin-left: -10px; }
+.detail .photo { display: block; width: 100%; max-height: 340px; background: var(--paper); border-bottom: 1px solid var(--line); }
+.detail .photo img { display: block; width: 100%; height: 100%; max-height: 340px; object-fit: cover; }
+.detail .photo.empty { height: 160px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.detail .photo.empty svg { width: 44px; height: 44px; flex: 0 0 auto; }
+.detail .dhead { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px 0; }
+.detail .dhead h2 { font-size: 22px; }
+.detail .dhead .sub, .detail .others { color: var(--muted); font-size: 14px; }
+.detail .message.open textarea { max-height: none; }
+.detail .message .hint { display: block; }
+.detail details.desc { margin: 0 16px; border: 1px solid var(--line); border-radius: var(--radius-s); padding: 10px 12px; }
+.detail details.desc summary { font-weight: 600; color: var(--ink-2); font-size: 14.5px; }
+.detail .desc-text { margin-top: 8px; font-size: 14.5px; line-height: 1.5; color: var(--ink-2); white-space: pre-wrap; }
+.progress { display: flex; flex-direction: column; gap: 8px; }
+.progress .bar { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.progress .fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .2s; }
 
 .empty { text-align: center; padding: 40px 16px; color: var(--muted); display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .empty svg { width: 44px; height: 44px; opacity: .5; }
@@ -265,3 +288,4 @@ table.emails td.n { text-align: right; white-space: nowrap; }
 #toast.error { background: var(--danger); color: #fff; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.detail { padding-bottom: 16px; }

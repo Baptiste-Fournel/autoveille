@@ -49,6 +49,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
       firstSeenAt: v.first_seen_at, lastSeenAt: v.last_seen_at,
       url: first?.url ?? '', site: first?.site ?? '', siteLabel: first?.site_label ?? '',
       imageUrl: withImage?.image_url ?? null,
+      description: listings.find((l) => l.description)?.description ?? null,
       sellerType: first?.seller_type ?? 'inconnu',
       message: pipeline.messageFor(v, settings),
       messageEdited: Boolean(v.message_override),

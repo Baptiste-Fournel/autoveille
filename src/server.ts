@@ -65,7 +65,7 @@ export async function buildServer(opts: { dataDir?: string; store?: Store } = {}
     if (!sessionOf(req)) return reply.code(401).send({ error: 'non connecté' });
   });
 
-  app.get('/api/me', async (req) => ({ authenticated: Boolean(sessionOf(req)), needsSetup: needsSetup() }));
+  app.get('/api/me', async (req) => ({ authenticated: Boolean(sessionOf(req)), needsSetup: needsSetup(), setupCodeRequired: Boolean(config.setupCode) }));
 
   app.post<{ Body: { setupCode?: string; password?: string } }>('/api/setup', async (req, reply) => {
     if (!needsSetup()) return reply.code(409).send({ error: 'Le mot de passe est déjà défini.' });

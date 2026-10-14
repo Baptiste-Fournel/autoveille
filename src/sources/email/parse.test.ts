@@ -106,3 +106,61 @@ Pour ne plus recevoir ces alertes : https://www.paruvendu.fr/compte/alertes`;
     expect(out.listings[0]).toMatchObject({ title: 'Alpine A110 Légende 252ch', price: 58900, km: 21000, year: 2019, city: 'Arcachon' });
   });
 });
+
+/** Layout of the real AutoScout24 "saved search" email (14/10/2026): tracking links, title not linked, price written "€ 35 500". */
+const AS24_HTML = `
+<html><body>
+<p>Meilleures recommandations correspondant à ta nouvelle recherche :</p>
+<table><tr>
+  <td><div><a href="https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e1" target="_blank"><img src="https://prod.pictures.autoscout24.net/listing-images/8723275b-cdc4-4a58-811d-ae9cef84c6f3_x.jpg/289x217.jpg" alt="AutoScout24 Listing"></a></div></td>
+  <td>
+    <table><tr><td><div><p><span><strong><span>BMW Z4</span></strong></span></p></div></td></tr></table>
+    <table><tr><td><div><p>Z4 sDrive20i 197 ch BVM6</p></div></td></tr></table>
+    <table><tr><td><div><p> <span><strong>€ 35 500</strong></span></p></div></td></tr></table>
+    <table><tr><td><div><p><span>24 800 km, 10/2020</span></p></div></td></tr></table>
+    <table><tr><td><a href="https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e2">Détails</a></td></tr></table>
+  </td>
+</tr></table>
+<table><tr>
+  <td><div><a href="https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e3" target="_blank"><img src="https://prod.pictures.autoscout24.net/listing-images/47b79f2f-x.jpg/289x217.jpg" alt="AutoScout24 Listing"></a></div></td>
+  <td>
+    <table><tr><td><div><p><span><strong><span>Peugeot 108</span></strong></span></p></div></td></tr></table>
+    <table><tr><td><div><p>108 1.0 VTi 68ch BVM5 Active</p></div></td></tr></table>
+    <table><tr><td><div><p> <span><strong>€ 2 000</strong></span></p></div></td></tr></table>
+    <table><tr><td><div><p><span>100 000 km, 10/2015</span></p></div></td></tr></table>
+    <table><tr><td><a href="https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e4">Détails</a></td></tr></table>
+  </td>
+</tr></table>
+<table><tr><td>
+  <a href="https://links.autoscout24.com/u/click?_t=t1&_m=m1&_e=e5">AutoScout24 - iOS</a>
+  <a href="https://links.autoscout24.com/u/click?_t=t1&_m=m1&_e=e6">AutoScout24 - Android</a>
+  <p>AutoScout24 France 88 ter, avenue du Général Leclerc | 92100 Boulogne-Billancourt | France</p>
+</td></tr></table>
+</body></html>`;
+
+describe('AutoScout24 saved-search email', () => {
+  const resolved = new Map([
+    ['https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e1', 'https://www.autoscout24.fr/offres/bmw-z4-z4-sdrive20i-197-ch-bvm6-essence-gris-cat_ma13mo18308-8723275b-cdc4-4a58-811d-ae9cef84c6f3?cldtidx=0&ap_tier=t30'],
+    ['https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e2', 'https://www.autoscout24.fr/offres/bmw-z4-z4-sdrive20i-197-ch-bvm6-essence-gris-cat_ma13mo18308-8723275b-cdc4-4a58-811d-ae9cef84c6f3?cldtidx=0&ap_tier=t30'],
+    ['https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e3', 'https://www.autoscout24.fr/offres/peugeot-108-108-1-0-vti-68ch-bvm5-active-essence-gris-cat_ma55mo20374-47b79f2f-3a0d-4c3b-886a-af09f763c39b?cldtidx=1'],
+    ['https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e4', 'https://www.autoscout24.fr/offres/peugeot-108-108-1-0-vti-68ch-bvm5-active-essence-gris-cat_ma55mo20374-47b79f2f-3a0d-4c3b-886a-af09f763c39b?cldtidx=1'],
+    ['https://links.autoscout24.com/u/click?_t=t1&_m=m1&_e=e5', 'https://apps.apple.com/us/app/autoscout24-buying-leasing/id311785642?pt=229724'],
+    ['https://links.autoscout24.com/u/click?_t=t1&_m=m1&_e=e6', 'https://play.google.com/store/apps/details?id=com.autoscout24'],
+  ]);
+
+  it('reads the price written with the euro sign first, the km, the year and the photo', () => {
+    const out = parseAlertEmail({ html: AS24_HTML, from: 'savedsearches@notifications.autoscout24.com' }, resolved);
+    expect(out.site).toBe('autoscout24');
+    expect(out.listings.map((l) => l.title)).toEqual(['BMW Z4', 'Peugeot 108']);
+    const [z4, p108] = out.listings;
+    expect(z4).toMatchObject({ site: 'autoscout24', price: 35500, km: 24800, year: 2020 });
+    expect(z4.imageUrl).toContain('8723275b');
+    expect(z4.url).toContain('/offres/bmw-z4');
+    expect(p108).toMatchObject({ price: 2000, km: 100000, year: 2015 });
+  });
+
+  it('ignores the App Store and Play Store links of the footer', () => {
+    const out = parseAlertEmail({ html: AS24_HTML, from: 'savedsearches@notifications.autoscout24.com' }, resolved);
+    expect(out.listings.some((l) => /apple|google/.test(l.url))).toBe(false);
+  });
+});

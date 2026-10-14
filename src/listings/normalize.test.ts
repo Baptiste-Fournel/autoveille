@@ -46,7 +46,8 @@ describe('brands and families', () => {
     expect(detectBrand('VW Golf GTI')?.make).toBe('Volkswagen');
     expect(detectBrand('Citroen DS 21')?.make).toBe('Citroën');
     expect(detectBrand('Renault Clio')).toBeTruthy();
-    expect(detectBrand('Toyota Supra')).toBeUndefined();
+    expect(detectBrand('Toyota Supra')).toMatchObject({ make: 'Toyota', family: 'autres' });
+    expect(detectBrand('Zastava Yugo')).toBeUndefined();
   });
 
   it('only counts American Fords', () => {
@@ -81,5 +82,23 @@ describe('fingerprint', () => {
     expect(similar({ km: 150000 }, { km: 162000 })).toBe(true);
     expect(similar({ km: undefined, price: 89000 }, { km: 42000, price: 86000 })).toBe(true);
     expect(similar({ price: 89000 }, { price: 60000 })).toBe(false);
+  });
+});
+
+describe('price written with the currency first (AutoScout24)', () => {
+  it('reads "€ 35 500" and does not swallow the kilometres that follow', () => {
+    expect(parsePrice('€ 35 500 24 800 km, 10/2020')).toBe(35500);
+    expect(parsePrice('€ 2 000 100 000 km, 10/2015')).toBe(2000);
+    expect(parsePrice('€ 1 200 000 100 000 km')).toBe(1200000);
+    expect(parsePrice('€35500')).toBe(35500);
+    expect(parsePrice('EUR 12 900')).toBe(12900);
+  });
+});
+
+describe('other brands', () => {
+  it('names the make of a car outside the four families, and lets a person move it into one', () => {
+    expect(extractVehicleInfo({ site: 's', siteLabel: 'S', externalId: '1', url: 'u', title: 'Mazda 5 2.0 CD-MZR 143 7pl Elegance' })).toMatchObject({ make: 'Mazda', model: '5', family: 'autres' });
+    const moved = extractVehicleInfo({ site: 's', siteLabel: 'S', externalId: '1', url: 'u', title: 'Toyota Supra 3.0' }, [{ name: 'Toyota', family: 'allemandes' }]);
+    expect(moved).toMatchObject({ make: 'Toyota', family: 'allemandes' });
   });
 });

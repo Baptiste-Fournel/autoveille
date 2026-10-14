@@ -17,12 +17,24 @@ function toInt(s: string): number {
 /** "89 900 €", "89900€", "89.900 EUR", "Prix : 89 900" */
 export function parsePrice(text: string): number | undefined {
   const t = cleanText(text);
-  const re = /(?<![\d,.\p{L}])(\d{1,3}(?:[ .]\d{3})+|\d{3,7})\s?(?:€|eur\b|euros?\b)/giu;
+  const plausible = (n: number): boolean => n >= 100 && n <= 5_000_000;
+  // "89 900 €", "89900€", "89.900 EUR"
+  const after = /(?<![\d,.\p{L}])(\d{1,3}(?:[ .]\d{3})+|\d{3,7})\s?(?:€|eur\b|euros?\b)/giu;
   let best: number | undefined;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(t))) {
+  while ((m = after.exec(t))) {
     const n = toInt(m[1]);
-    if (n >= 100 && n <= 5_000_000 && (best === undefined || n > best)) best = n;
+    if (plausible(n) && (best === undefined || n > best)) best = n;
+  }
+  if (best !== undefined) return best;
+  // "€ 35 500" (AutoScout24). When the kilometres follow directly ("€ 2 000 100 000 km"), the
+  // greedy match swallows them: the groups before the km belong to the kilometres, not the price.
+  const before = /(?:€|\beur\b|\beuros?\b)\s?(\d{1,3}(?:[ .]\d{3})*|\d{3,7})(?![\d])(\s?km\b)?/giu;
+  while ((m = before.exec(t))) {
+    let groups = m[1].split(/[ .]/);
+    if (m[2] && groups.length >= 2) groups = groups.slice(0, groups.length >= 3 ? -2 : -1);
+    const n = Number(groups.join(''));
+    if (plausible(n) && (best === undefined || n > best)) best = n;
   }
   if (best !== undefined) return best;
   const labelled = /prix\s*:?\s*(\d{1,3}(?:[ .]\d{3})+|\d{3,7})(?![\d])/iu.exec(t);
@@ -38,6 +50,13 @@ export function parseKm(text: string): number | undefined {
     const n = toInt(m[1]);
     // Reject "12 km" distance mentions and absurd values.
     if (n >= 100 && n <= 2_000_000) return n;
+    // "€ 2 000 100 000 km": a price glued to the kilometres. The km are the last groups.
+    const groups = m[1].split(/[ .]/);
+    for (const k of [2, 1]) {
+      if (groups.length <= k) continue;
+      const tail = Number(groups.slice(-k).join(''));
+      if (tail >= 1000 && tail <= 2_000_000) return tail;
+    }
   }
   return undefined;
 }

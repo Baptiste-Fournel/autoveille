@@ -45,6 +45,8 @@ export interface ListingRow {
   postal_code: string | null;
   seller_type: SellerType;
   image_url: string | null;
+  /** Text of the listing as it appeared in the alert email or page (an excerpt, for the in-app view). */
+  description: string | null;
   published_at: string | null;
   source_ref: string | null;
   first_seen_at: string;
@@ -113,6 +115,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS source_runs (source TEXT PRIMARY KEY, last_run_at TEXT, ok INTEGER NOT NULL DEFAULT 1, detail TEXT);
       CREATE TABLE IF NOT EXISTS secrets (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
+    // Colonnes ajoutées après la première version : ajout sans perte sur une base existante.
+    const cols = (this.db.prepare('PRAGMA table_info(listings)').all() as Array<{ name: string }>).map((c) => c.name);
+    if (!cols.includes('description')) this.db.exec('ALTER TABLE listings ADD COLUMN description TEXT');
   }
 
   // ---------- settings ----------
@@ -150,8 +155,8 @@ export class Store {
   }
 
   insertListing(l: Omit<ListingRow, 'id'>): number {
-    const r = this.db.prepare(`INSERT INTO listings (vehicle_id, site, site_label, external_id, url, title, price, km, year, city, postal_code, seller_type, image_url, published_at, source_ref, first_seen_at, last_seen_at)
-      VALUES (@vehicle_id, @site, @site_label, @external_id, @url, @title, @price, @km, @year, @city, @postal_code, @seller_type, @image_url, @published_at, @source_ref, @first_seen_at, @last_seen_at)`).run(l);
+    const r = this.db.prepare(`INSERT INTO listings (vehicle_id, site, site_label, external_id, url, title, price, km, year, city, postal_code, seller_type, image_url, description, published_at, source_ref, first_seen_at, last_seen_at)
+      VALUES (@vehicle_id, @site, @site_label, @external_id, @url, @title, @price, @km, @year, @city, @postal_code, @seller_type, @image_url, @description, @published_at, @source_ref, @first_seen_at, @last_seen_at)`).run(l);
     const id = Number(r.lastInsertRowid);
     if (l.price !== null && l.price !== undefined) this.db.prepare('INSERT INTO price_history(listing_id, price, seen_at) VALUES (?, ?, ?)').run(id, l.price, l.first_seen_at);
     return id;
@@ -308,6 +313,7 @@ export function rawToListingRow(raw: RawListing, vehicleId: number, now: string)
     postal_code: raw.postalCode ?? null,
     seller_type: raw.sellerType ?? 'inconnu',
     image_url: raw.imageUrl ?? null,
+    description: raw.description?.trim() || null,
     published_at: raw.publishedAt ?? null,
     source_ref: raw.sourceRef ?? null,
     first_seen_at: now,

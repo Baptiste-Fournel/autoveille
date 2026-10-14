@@ -23,6 +23,10 @@ Les sites d'annonces (Leboncoin, La Centrale, AutoScout24, ParuVendu) envoient e
 
 Pas intéressé : **Ignorer**. Un vendeur demande à ne plus être sollicité : **Ne plus contacter**, il est mis de côté définitivement.
 
+Toucher la photo ou le titre d'une annonce ouvre sa **fiche** : grande photo, caractéristiques, texte de l'annonce tel que reçu, message modifiable, sans quitter l'application.
+
+Plusieurs annonces à traiter : **Traiter en rafale**. Elles défilent une par une : « Ouvrir l'annonce et copier le message », coller, envoyer, revenir ; l'application demande « Message envoyé ? » et passe à la suivante. Dix annonces se traitent en une minute, et chaque envoi reste le vôtre.
+
 Une annonce dont le prix baisse ou qui est republiée garde son état ; une étiquette « Prix baissé » ou « Republiée » apparaît, sans nouvelle sollicitation.
 
 ## Réglages

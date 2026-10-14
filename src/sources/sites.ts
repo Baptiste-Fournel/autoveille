@@ -74,17 +74,20 @@ export interface ListingRef { site: string; siteLabel: string; id: string; url: 
 export function listingRef(urlStr: string, hint?: SiteDef): ListingRef | undefined {
   let u: URL;
   try { u = new URL(urlStr); } catch { return undefined; }
-  const site = siteForHost(u.hostname) ?? hint;
+  const own = siteForHost(u.hostname);
   const pathAndQuery = u.pathname + (u.search || '');
-  if (site && siteForHost(u.hostname)) {
-    for (const re of site.listing) {
+  if (own) {
+    for (const re of own.listing) {
       const m = re.exec(pathAndQuery);
-      if (m) return { site: site.key, siteLabel: site.label, id: m[1], url: canonical(u) };
+      if (m) return { site: own.key, siteLabel: own.label, id: m[1], url: canonical(u) };
     }
     return undefined;
   }
+  // An email from a known site only carries that site's ads: a link to another host (app stores,
+  // social networks, partners) is never a listing.
+  if (hint) return undefined;
   // Generic: a path that looks like an ad page, with a long number or a uuid in it.
-  if (NON_LISTING.test(u.pathname)) return undefined;
+  if (NON_LISTING.test(u.hostname + u.pathname)) return undefined;
   if (!/(annonce|\/ad\/|voiture|auto|occasion|vehicule|véhicule|offre|detail)/i.test(u.pathname)) return undefined;
   const uuid = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(u.pathname);
   const digits = u.pathname.match(/\d{5,}/g);

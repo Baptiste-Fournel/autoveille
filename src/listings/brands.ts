@@ -59,6 +59,52 @@ export const BRANDS: BrandDef[] = [
   { name: 'Talbot', family: 'francaises', aliases: [] },
   { name: 'Facel Vega', family: 'francaises', aliases: ['Facel'] },
   { name: 'Panhard', family: 'francaises', aliases: [] },
+  // Autres marques, reconnues pour nommer la voiture et expliquer pourquoi elle est écartée
+  { name: 'Toyota', family: 'autres', aliases: [] },
+  { name: 'Lexus', family: 'autres', aliases: [] },
+  { name: 'Honda', family: 'autres', aliases: [] },
+  { name: 'Acura', family: 'autres', aliases: [] },
+  { name: 'Nissan', family: 'autres', aliases: ['Datsun'] },
+  { name: 'Infiniti', family: 'autres', aliases: [] },
+  { name: 'Mazda', family: 'autres', aliases: [] },
+  { name: 'Subaru', family: 'autres', aliases: [] },
+  { name: 'Mitsubishi', family: 'autres', aliases: [] },
+  { name: 'Suzuki', family: 'autres', aliases: [] },
+  { name: 'Daihatsu', family: 'autres', aliases: [] },
+  { name: 'Isuzu', family: 'autres', aliases: [] },
+  { name: 'Hyundai', family: 'autres', aliases: [] },
+  { name: 'Kia', family: 'autres', aliases: [] },
+  { name: 'Genesis', family: 'autres', aliases: [] },
+  { name: 'SsangYong', family: 'autres', aliases: ['Ssangyong', 'KGM'] },
+  { name: 'Volvo', family: 'autres', aliases: [] },
+  { name: 'Saab', family: 'autres', aliases: [] },
+  { name: 'Polestar', family: 'autres', aliases: [] },
+  { name: 'Koenigsegg', family: 'autres', aliases: [] },
+  { name: 'Skoda', family: 'autres', aliases: ['Škoda'] },
+  { name: 'Seat', family: 'autres', aliases: [] },
+  { name: 'Cupra', family: 'autres', aliases: [] },
+  { name: 'Dacia', family: 'autres', aliases: [] },
+  { name: 'Jaguar', family: 'autres', aliases: [] },
+  { name: 'Land Rover', family: 'autres', aliases: ['Range Rover', 'Landrover'] },
+  { name: 'Mini', family: 'autres', aliases: [] },
+  { name: 'Aston Martin', family: 'autres', aliases: ['Aston-Martin'] },
+  { name: 'Bentley', family: 'autres', aliases: [] },
+  { name: 'Rolls-Royce', family: 'autres', aliases: ['Rolls Royce'] },
+  { name: 'Lotus', family: 'autres', aliases: [] },
+  { name: 'McLaren', family: 'autres', aliases: ['Mclaren'] },
+  { name: 'MG', family: 'autres', aliases: [] },
+  { name: 'Morgan', family: 'autres', aliases: [] },
+  { name: 'TVR', family: 'autres', aliases: [] },
+  { name: 'Caterham', family: 'autres', aliases: [] },
+  { name: 'Triumph', family: 'autres', aliases: [] },
+  { name: 'Austin', family: 'autres', aliases: ['Austin-Healey', 'Austin Healey'] },
+  { name: 'Rover', family: 'autres', aliases: [] },
+  { name: 'Lada', family: 'autres', aliases: [] },
+  { name: 'BYD', family: 'autres', aliases: [] },
+  { name: 'Lynk & Co', family: 'autres', aliases: ['Lynk&Co', 'Lynk and Co'] },
+  { name: 'Xpeng', family: 'autres', aliases: [] },
+  { name: 'Nio', family: 'autres', aliases: [] },
+  { name: 'Leapmotor', family: 'autres', aliases: [] },
 ];
 
 /** Ford models that are "American" Fords; a Ford Fiesta is not what a US-car specialist wants. */
@@ -90,7 +136,7 @@ function customIndex(extra: CustomBrand[]): Array<{ pattern: RegExp; def: BrandD
   let idx = customCache.get(key);
   if (!idx) {
     idx = extra
-      .filter((b) => b.name.trim() && !BRANDS.some((k) => k.name.toLowerCase() === b.name.toLowerCase()))
+      .filter((b) => b.name.trim() && !BRANDS.some((k) => k.family !== 'autres' && k.name.toLowerCase() === b.name.toLowerCase()))
       .map((b) => ({ pattern: new RegExp(`(^|[^\\p{L}])${escapeRegExp(b.name.trim())}(?=$|[^\\p{L}])`, 'iu'), def: { name: b.name.trim(), family: b.family, aliases: [] } }));
     customCache.set(key, idx);
   }
@@ -116,7 +162,9 @@ export function detectBrand(title: string, extra: CustomBrand[] = []): BrandMatc
 /** Family of a (make, model) pair, with the Ford special case. */
 export function detectFamily(make: string | undefined, model: string | undefined, title: string, extra: CustomBrand[] = []): Family {
   if (!make) return 'autres';
-  const def = BRANDS.find((b) => b.name === make) ?? extra.map((b) => ({ ...b, aliases: [] as string[] })).find((b) => b.name === make);
+  // A brand the person added to a family wins over the built-in "other brand" entry (Toyota moved to a family, say).
+  const custom = extra.find((b) => b.name.trim().toLowerCase() === make.toLowerCase());
+  const def = custom ? { name: custom.name.trim(), family: custom.family, aliases: [] as string[] } : BRANDS.find((b) => b.name === make);
   if (!def) return 'autres';
   if (def.name === 'Ford') {
     const hay = `${model ?? ''} ${title}`;

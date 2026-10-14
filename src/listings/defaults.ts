@@ -160,7 +160,7 @@ Si vous préférez vendre par vous-même, aucun problème, je n'insisterai pas.
 
 export function defaultSettings(): Settings {
   return {
-    dealer: { firstName: 'Prénom', lastName: 'Nom', company: 'Nom de la concession', city: 'Bordeaux', phone: '06 00 00 00 00' },
+    dealer: { firstName: '', lastName: '', company: '', city: 'Bordeaux', phone: '' },
     zone: { city: 'Bordeaux', postalCode: '33000', lat: 44.8378, lon: -0.5792, radiusKm: 100 },
     maxKm: 100_000,
     privateOnly: true,
@@ -186,11 +186,19 @@ export function defaultSettings(): Settings {
 }
 
 /** Fill in anything missing from a stored settings object (after an upgrade, for example). */
+/** The first version shipped example values ("Prénom", "06 00 00 00 00") as real values; they count as empty. */
+const PLACEHOLDERS = new Set(['Prénom', 'Nom', 'Nom de la concession', '06 00 00 00 00']);
+function withoutPlaceholders(dealer: Settings['dealer']): Settings['dealer'] {
+  const clean = { ...dealer };
+  for (const k of Object.keys(clean) as Array<keyof Settings['dealer']>) if (PLACEHOLDERS.has(clean[k])) clean[k] = '';
+  return clean;
+}
+
 export function mergeSettings(stored: Partial<Settings> | undefined): Settings {
   const d = defaultSettings();
   if (!stored) return d;
   const out: Settings = {
-    dealer: { ...d.dealer, ...(stored.dealer ?? {}) },
+    dealer: withoutPlaceholders({ ...d.dealer, ...(stored.dealer ?? {}) }),
     zone: { ...d.zone, ...(stored.zone ?? {}) },
     maxKm: stored.maxKm ?? d.maxKm,
     privateOnly: stored.privateOnly ?? d.privateOnly,
