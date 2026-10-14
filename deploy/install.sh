@@ -26,7 +26,7 @@ log "Paquets système"
 apt-get update -q
 echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections
 echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections
-apt-get install -y -q curl git ca-certificates gnupg debian-keyring debian-archive-keyring apt-transport-https iptables-persistent >/dev/null
+apt-get install -y -q curl git ca-certificates gnupg debian-keyring debian-archive-keyring apt-transport-https iptables-persistent build-essential python3 >/dev/null
 
 if ! command -v node >/dev/null || [ "$(node -e 'console.log(process.versions.node.split(".")[0])')" -lt 22 ]; then
   log "Node.js 22"
