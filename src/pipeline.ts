@@ -23,6 +23,8 @@ export type IngestOutcome =
 
 export interface Notifier {
   newVehicle(vehicle: VehicleRow, raw: RawListing, message: string): Promise<void>;
+  /** A seller lowered the price of a vehicle still in play: worth a nudge. Optional. */
+  priceDrop?(vehicle: VehicleRow, raw: RawListing, from: number, to: number): Promise<void>;
 }
 
 export class Pipeline {
@@ -76,6 +78,12 @@ export class Pipeline {
         const dropped = raw.price < existing.price;
         this.store.updateVehicle(vehicleId, { price: raw.price, price_dropped: dropped ? 1 : 0, last_seen_at: now });
         this.store.addEvent(vehicleId, dropped ? 'prix_baisse' : 'prix_hausse', `${existing.price} → ${raw.price}`, now);
+        // A lower price on a vehicle the person is still interested in (waiting, or contacted) is worth a notification.
+        const v = this.store.getVehicle(vehicleId);
+        if (dropped && v && v.matched && !v.do_not_contact && (v.status === 'nouveau' || v.status === 'contacte') && this.notifier?.priceDrop) {
+          try { await this.notifier.priceDrop(v, raw, existing.price, raw.price); }
+          catch (err) { this.store.addEvent(vehicleId, 'notification_echec', String(err), new Date().toISOString()); }
+        }
         return { kind: 'price', vehicleId, from: existing.price, to: raw.price };
       }
       this.store.touchListing(existing.id, now, raw.price ?? null);
@@ -123,7 +131,7 @@ export class Pipeline {
       year: info.year ?? null, km: info.km ?? null, price: info.price ?? null,
       city: raw.city ?? null, postal_code: raw.postalCode ?? null, lat: geo.lat, lon: geo.lon, distance_km: geo.distance,
       status: 'nouveau', do_not_contact: 0, matched: verdict.pass ? 1 : 0, reasons: JSON.stringify(verdict.reasons),
-      message_override: null, first_seen_at: now, last_seen_at: now, notified_at: null, price_dropped: 0, reposted: 0,
+      message_override: null, first_seen_at: now, last_seen_at: now, notified_at: null, price_dropped: 0, reposted: 0, note: null,
     });
     this.store.insertListing(rawToListingRow(raw, vehicleId, now));
     this.store.addEvent(vehicleId, 'nouveau', raw.siteLabel, now);

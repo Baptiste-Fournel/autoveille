@@ -29,16 +29,21 @@ const ICONS = {
   inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2.5-8h13L21 13v6H3z"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/></svg>',
   open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>',
   bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>',
+  pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M13.5 8.5l3 3"/></svg>',
   logo: '<svg viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="8" fill="#1F5E3C"/><path d="M8 19l2.2-5.2A2 2 0 0 1 12 12.5h8a2 2 0 0 1 1.8 1.2L24 19" stroke="#F2C94C" stroke-width="2" stroke-linecap="round"/><path d="M6.5 19h19v4h-2.2a1.8 1.8 0 0 1-3.6 0h-7.4a1.8 1.8 0 0 1-3.6 0H6.5z" fill="#F2C94C"/></svg>',
 };
 const svg = (name, cls) => { const s = el('span', { class: cls || '', html: ICONS[name] }); return s.firstChild; };
 
-function toast(message, error = false) {
+/** Short confirmation at the bottom of the screen. With `undo`, an « Annuler » button stays six seconds. */
+function toast(message, error = false, undo) {
   const t = document.getElementById('toast');
-  t.textContent = message;
-  t.className = 'show' + (error ? ' error' : '');
+  t.replaceChildren(document.createTextNode(message));
+  if (undo) t.append(el('button', { class: 'undo', type: 'button', onclick: async () => { t.className = ''; try { await undo(); } catch (e) { toast(e.message, true); } } }, 'Annuler'));
+  t.className = 'show' + (error ? ' error' : '') + (undo ? ' with-undo' : '');
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { t.className = ''; }, error ? 5000 : 2600);
+  toast.timer = setTimeout(() => { t.className = ''; }, undo ? 6000 : error ? 5000 : 2600);
 }
 
 async function api(method, url, body) {
@@ -62,6 +67,14 @@ const fmt = {
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   },
   plural: (n, s, p) => `${fmt.int(n)} ${n > 1 ? p : s}`,
+  /** Lower case without accents, for searching. */
+  fold: (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(),
+  /** "il y a 3 j" style, for how long a contact has been waiting. */
+  days(iso) {
+    if (!iso) return '';
+    const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400_000);
+    return d <= 0 ? 'aujourd’hui' : d === 1 ? 'hier' : `il y a ${d} j`;
+  },
 };
 
 /** Like node.append, but skips null/false (the native append would write the text "null"). */
@@ -84,6 +97,14 @@ const state = {
   sources: null,
   pushStatus: 'inconnu',
   busy: false,
+  pendingConfirm: null, // id de l'annonce dont on attend « message envoyé ? », pour survivre à un rafraîchissement
+  search: '',
+};
+
+/** Per-device preferences (a hidden checklist, say). Browser storage can be unavailable: every access is guarded. */
+const prefs = {
+  get: (k) => { try { return localStorage.getItem('av_' + k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem('av_' + k, v); } catch { /* ignoré */ } },
 };
 
 // ---------- routeur ----------
@@ -99,13 +120,17 @@ async function render() {
   if (!state.me) {
     try { state.me = await api('GET', '/api/me'); } catch { state.me = { authenticated: false }; }
   }
-  $app.replaceChildren();
-  if (!state.me.authenticated) { $app.append(renderLogin()); return; }
+  if (!state.me.authenticated) { $app.replaceChildren(renderLogin()); return; }
   const route = currentRoute();
-  state.route = route.name;
+  const sameScreen = state.route === route.name && state.routeArg === route.arg;
+  const y = window.scrollY;
+  state.route = route.name; state.routeArg = route.arg;
   const views = { annonces: renderAnnonces, reglages: renderReglages, messages: renderMessages, sources: renderSources, annonce: renderAnnonceDetail, rafale: renderRafale };
   const view = views[route.name] || renderAnnonces;
-  $app.append(renderShell(await view(route)));
+  const content = await view(route);
+  $app.replaceChildren(renderShell(content));
+  // A refresh of the same screen keeps the reading position; a new screen starts at the top.
+  window.scrollTo({ top: sameScreen ? y : 0 });
 }
 
 function navLinks() {
@@ -114,7 +139,7 @@ function navLinks() {
     ['annonces', 'Annonces', 'car', n],
     ['reglages', 'Réglages', 'sliders'],
     ['messages', 'Messages', 'chat'],
-    ['sources', 'Sources', 'inbox'],
+    ['sources', 'Sites', 'inbox'],
   ];
   const active = state.route === 'annonce' || state.route === 'rafale' ? 'annonces' : state.route;
   const top = el('nav', { class: 'nav', 'aria-label': 'Navigation' }, items.map(([r, label, , count]) =>
@@ -161,34 +186,96 @@ function renderLogin() {
 async function loadOverview() { state.overview = await api('GET', '/api/overview'); }
 
 async function renderAnnonces() {
-  const [ov, data] = await Promise.all([api('GET', '/api/overview'), api('GET', `/api/vehicles?status=${state.filter}`)]);
+  const kind = state.kind || 'suivies';
+  const [ov, data] = await Promise.all([api('GET', '/api/overview'), api('GET', `/api/vehicles?status=${state.filter}${state.filter === 'ecartees' ? `&kind=${kind}` : ''}`)]);
   state.overview = ov; state.vehicles = data.vehicles;
   const c = ov.counts;
   const filters = [['nouveau', 'À traiter', c.nouveau], ['contacte', 'Contactées', c.contacte], ['repondu', 'Ont répondu', c.repondu], ['ignore', 'Ignorées', c.ignore], ['ecartees', 'Écartées par les filtres'], ['tous', 'Toutes']];
   const lastRun = (ov.sources || []).find((s) => s.source === 'email');
 
+  const w = ov.week || { received: 0, contacted: 0, replied: 0 };
+  const weekLine = (w.received || w.contacted || w.replied)
+    ? el('p', { class: 'muted small week' }, `7 derniers jours : ${fmt.plural(w.received, 'annonce retenue', 'annonces retenues')}, ${fmt.plural(w.contacted, 'contactée', 'contactées')}, ${fmt.plural(w.replied, 'réponse', 'réponses')}.`)
+    : null;
   const head = el('div', { class: 'headline' },
     el('h1', {}, state.filter === 'nouveau' ? (c.nouveau ? `${fmt.plural(c.nouveau, 'annonce à traiter', 'annonces à traiter')}` : 'Rien à traiter pour le moment') : filters.find((f) => f[0] === state.filter)[1]),
     el('p', { class: 'muted' }, `${ov.zone.city}, ${ov.zone.radiusKm} km`, lastRun?.last_run_at ? ` · boîte mail vérifiée ${fmt.ago(lastRun.last_run_at)}` : (ov.imapConfigured ? '' : ' · boîte mail pas encore reliée')),
+    weekLine,
     state.filter === 'nouveau' && c.nouveau >= 2 ? el('a', { class: 'btn primary rafale-cta', href: '#/rafale' }, svg('bolt'), `Traiter en rafale (${c.nouveau})`) : null,
   );
-  const dealerMissing = !ov.dealer?.firstName || !ov.dealer?.phone;
-  const setupNote = dealerMissing ? el('a', { class: 'note warn link', href: '#/reglages' }, 'Vos coordonnées ne sont pas encore renseignées : les messages partiraient sans votre nom ni votre téléphone. Les saisir dans Réglages →') : null;
+  const setup = state.filter === 'nouveau' ? setupCard(ov) : null;
+  const issueSites = Array.from(new Set((ov.alertIssues || []).map((m) => m.split(' : ')[0])));
+  const issues = issueSites.length && state.filter === 'nouveau'
+    ? el('a', { class: 'note warn link', href: '#/sources' }, el('b', {}, issueSites.length > 1 ? 'Des alertes à modifier sur les sites : ' : 'Une alerte à modifier sur le site : '), issueSites.join(', '), ' — elle ne couvre pas vos réglages. Voir dans Sites →')
+    : null;
   const bar = el('div', { class: 'filterbar', role: 'tablist' }, filters.map(([key, label, count]) =>
-    el('button', { class: 'chip', role: 'tab', 'aria-pressed': state.filter === key, onclick: () => { state.filter = key; render(); } }, label, count ? el('span', { class: 'badge count' }, count) : null)));
+    el('button', { class: 'chip', role: 'tab', 'aria-pressed': state.filter === key, onclick: () => { state.filter = key; state.search = ''; render(); } }, label, count ? el('span', { class: 'badge count' }, count) : null)));
+  // Écartées : grouped by the reason, so a good deal hiding behind one criterion is quick to spot.
+  let kinds = null;
+  if (state.filter === 'ecartees') {
+    const k = data.kinds || {};
+    const options = [['suivies', 'Marques suivies'], ['loin', 'Trop loin'], ['km', 'Trop de km'], ['special', 'Ni supercar ni collection'], ['pro', 'Vendeur pro'], ['marque', 'Autres marques'], ['tous', 'Toutes']];
+    kinds = el('div', { class: 'kinds' },
+      el('p', { class: 'muted small' }, 'Les 14 derniers jours. Un coup d’œil de temps en temps : « Garder quand même » remet une annonce à traiter.'),
+      el('div', { class: 'filterbar', role: 'tablist' }, options.map(([key, label]) => el('button', { class: 'chip', role: 'tab', 'aria-pressed': kind === key, onclick: () => { state.kind = key; state.search = ''; render(); } }, label, k[key] ? el('span', { class: 'badge count' }, k[key]) : null))));
+  }
 
   const list = el('div', { class: 'stack' });
+  let search = null;
   if (!state.vehicles.length) {
     list.append(el('div', { class: 'empty' }, svg('car'),
-      el('b', {}, state.filter === 'nouveau' ? 'Aucune annonce en attente' : 'Rien ici'),
+      el('b', {}, state.filter === 'nouveau' ? 'Aucune annonce en attente' : state.filter === 'ecartees' ? 'Rien d’écarté dans cette catégorie' : 'Rien ici'),
       el('p', {}, state.filter === 'nouveau' ? 'Les nouvelles annonces arrivent ici dès qu’un site envoie une alerte.' : ''),
       !ov.imapConfigured ? el('a', { class: 'btn', href: '#/sources' }, 'Relier la boîte mail des alertes') : null,
     ));
   } else {
-    for (const v of state.vehicles) list.append(renderVehicle(v));
+    const cards = state.vehicles.map((v) => [v, renderVehicle(v)]);
+    for (const [, card] of cards) list.append(card);
+    if (state.vehicles.length >= 6) {
+      const none = el('p', { class: 'muted small hidden' }, 'Aucune annonce ne correspond.');
+      const input = el('input', { class: 'input', type: 'search', placeholder: 'Rechercher : modèle, marque, ville…', value: state.search, 'aria-label': 'Rechercher dans la liste', oninput: (e) => {
+        state.search = e.target.value;
+        const q = fmt.fold(state.search);
+        let shown = 0;
+        for (const [v, card] of cards) { const hit = !q || fmt.fold(`${v.name} ${v.title} ${v.city || ''} ${v.siteLabel} ${v.note || ''}`).includes(q); card.classList.toggle('hidden', !hit); if (hit) shown++; }
+        none.classList.toggle('hidden', shown > 0);
+      } });
+      search = el('div', { class: 'searchbox' }, svg('search'), input, none);
+      if (state.search) setTimeout(() => input.dispatchEvent(new Event('input')), 0);
+    }
   }
   setTimeout(() => document.querySelectorAll('.message textarea').forEach(autosize), 0);
-  return [head, setupNote, bar, list];
+  return [head, setup, issues, bar, kinds, search, list];
+}
+
+const MAIN_SITES = ['leboncoin', 'lacentrale', 'autoscout24', 'paruvendu'];
+
+/**
+ * The four things to do once. Each line goes where it is done; the card disappears when all is done,
+ * or when the person hides it on this device.
+ */
+function setupCard(ov) {
+  if (prefs.get('setup_hidden') === '1') return null;
+  const pushPossible = 'Notification' in window && 'serviceWorker' in navigator;
+  const alertsDone = MAIN_SITES.filter((k) => (ov.alertsDone || []).includes(k)).length;
+  const steps = [
+    { ok: Boolean(ov.dealer?.firstName && ov.dealer?.phone), label: 'Votre nom et votre téléphone', href: '#/reglages', action: 'Réglages' },
+    { ok: Boolean(ov.imapConfigured), label: 'La boîte mail des alertes', href: '#/sources', action: 'Sites' },
+    { ok: alertsDone >= MAIN_SITES.length, label: `Les alertes sur les sites (${alertsDone}/${MAIN_SITES.length})`, href: '#/sources', action: 'Sites' },
+  ];
+  if (pushPossible) steps.push({ ok: state.pushStatus === 'active', label: 'Les notifications sur cet appareil', onclick: enablePush, action: 'Activer' });
+  const done = steps.filter((s) => s.ok).length;
+  if (done === steps.length) return null;
+  const card = el('section', { class: 'card setup' },
+    el('div', { class: 'row between' },
+      el('h2', {}, 'Mise en route ', el('span', { class: 'muted' }, `${done}/${steps.length}`)),
+      el('button', { class: 'btn quiet small', type: 'button', title: 'Ne plus afficher sur cet appareil', onclick: () => { prefs.set('setup_hidden', '1'); card.remove(); } }, 'Masquer')),
+    el('ul', { class: 'steps' }, steps.map((s) => el('li', { class: s.ok ? 'done' : '' },
+      el('span', { class: 'tick' }, s.ok ? svg('check') : null),
+      el('span', { class: 'label' }, s.label),
+      s.ok ? null : (s.href ? el('a', { class: 'btn small', href: s.href }, s.action) : el('button', { class: 'btn small', type: 'button', onclick: s.onclick }, s.action))))),
+  );
+  return card;
 }
 
 function autosize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; }
@@ -206,15 +293,23 @@ function messageBlock(ta) {
 
 function vehicleBadges(v) {
   const badges = [];
-  if (v.status === 'nouveau' && v.matched) badges.push(el('span', { class: 'badge new' }, 'Nouveau'));
+  const fresh = Date.now() - new Date(v.firstSeenAt).getTime() < 86400_000;
+  if (v.status === 'nouveau' && v.matched && fresh) badges.push(el('span', { class: 'badge new' }, 'Nouveau'));
   if (v.priceDropped) badges.push(el('span', { class: 'badge ok' }, 'Prix baissé'));
   if (v.reposted) badges.push(el('span', { class: 'badge' }, 'Republiée'));
   if (v.listings.length > 1) badges.push(el('span', { class: 'badge' }, `Aussi sur ${v.listings.slice(1).map((l) => l.siteLabel).join(', ')}`));
-  if (v.specialReason) badges.push(el('span', { class: 'badge' }, v.specialReason));
+  if (v.specialReason) badges.push(el('span', { class: 'badge', title: 'Pourquoi cette annonce est retenue' }, `Retenue : ${v.specialReason}`));
   if (v.sellerType === 'pro') badges.push(el('span', { class: 'badge warn' }, 'Vendeur pro'));
   if (v.doNotContact) badges.push(el('span', { class: 'badge warn' }, 'Ne plus contacter'));
   if (v.messageEdited) badges.push(el('span', { class: 'badge' }, 'Message modifié'));
   return badges;
+}
+
+/** Where the vehicle stands with the seller, for the card and the sheet. */
+function followUpText(v) {
+  if (v.status === 'repondu') return v.repliedAt ? `A répondu ${fmt.days(v.repliedAt)}` : 'A répondu';
+  if (v.status === 'contacte') return v.contactedAt ? `Contactée ${fmt.days(v.contactedAt)}, sans réponse pour l’instant` : 'Contactée';
+  return '';
 }
 
 const whereText = (v) => [v.city, v.distanceKm !== null ? `à ${v.distanceKm} km` : null].filter(Boolean).join(', ');
@@ -240,12 +335,14 @@ function messageTextarea(v) {
 
 /** Opens the listing (on a phone installed as an app, in a panel over the app) and puts the message in the clipboard. */
 async function openAndCopy(v, text) {
-  const w = window.open(v.url, '_blank', 'noopener');
-  let copied = true;
-  try { await navigator.clipboard.writeText(text); }
-  catch {
-    try { const t = el('textarea', { style: 'position:fixed;opacity:0', value: text }); document.body.append(t); t.select(); copied = document.execCommand('copy'); t.remove(); } catch { copied = false; }
-  }
+  // The copy starts first, inside the tap, which is what phones require; the tab opens right after.
+  let copied = false;
+  const legacyCopy = () => { try { const t = el('textarea', { style: 'position:fixed;opacity:0', value: text }); document.body.append(t); t.select(); const ok = document.execCommand('copy'); t.remove(); return ok; } catch { return false; } };
+  const pending = navigator.clipboard?.writeText ? navigator.clipboard.writeText(text).then(() => true, () => legacyCopy()) : Promise.resolve(legacyCopy());
+  // Without the "noopener" feature string: with it, window.open returns null and a blocked tab can't be told apart from an open one.
+  const w = window.open(v.url, '_blank');
+  if (w) { try { w.opener = null; } catch { /* ignoré */ } }
+  copied = await pending;
   if (!w) toast('Le navigateur a bloqué l’ouverture de l’annonce : ouvrez-la avec le lien « Voir l’annonce ».', true);
   else toast(copied ? 'Message copié : collez-le dans le formulaire de contact de l’annonce.' : 'Annonce ouverte. Copiez le message à la main.');
   return Boolean(w);
@@ -257,15 +354,23 @@ async function openAndCopy(v, text) {
  */
 function vehicleActions(v, ta, { afterUpdate, inBurst = false } = {}) {
   const actions = el('div', { class: 'actions' });
+  // Every change of status can be undone from the confirmation, for the finger that slips.
   const update = async (patch, msg) => {
-    try { await api('POST', `/api/vehicles/${v.id}`, patch); if (msg) toast(msg); await afterUpdate(patch); }
+    if (state.pendingConfirm === v.id) state.pendingConfirm = null;
+    const inverse = (patch.status || patch.doNotContact) ? { status: v.status, ...(patch.doNotContact ? { doNotContact: false } : {}) } : null;
+    const undo = inverse ? async () => { await api('POST', `/api/vehicles/${v.id}`, inverse); toast('Annulé'); await afterUpdate({ undone: patch }); } : undefined;
+    try { await api('POST', `/api/vehicles/${v.id}`, patch); if (msg) toast(msg, false, undo); await afterUpdate(patch); }
     catch (err) { toast(err.message, true); }
   };
   const confirmBox = el('div', { class: 'confirm hidden' }, el('b', {}, 'Message envoyé au vendeur ?'),
     el('button', { class: 'btn primary small', onclick: () => update({ status: 'contacte' }, inBurst ? 'Envoyée, à la suivante' : 'Passée en « contactée »') }, inBurst ? 'Oui, envoyé, suivante' : 'Oui, envoyé'),
     inBurst ? el('button', { class: 'btn small', onclick: () => update({ status: 'ignore' }, 'Annonce ignorée') }, 'Non, ignorer') : null,
-    el('button', { class: 'btn small quiet', onclick: () => { confirmBox.classList.add('hidden'); if (inBurst) afterUpdate({ skip: true }); } }, inBurst ? 'Passer' : 'Pas maintenant'));
-  const main = el('button', { class: 'btn primary big', onclick: async () => { await openAndCopy(v, ta ? ta.value : v.message); confirmBox.classList.remove('hidden'); confirmBox.scrollIntoView({ block: 'nearest' }); } }, svg('open'), 'Ouvrir l’annonce et copier le message');
+    el('button', { class: 'btn small quiet', onclick: () => { confirmBox.classList.add('hidden'); if (state.pendingConfirm === v.id) state.pendingConfirm = null; if (inBurst) afterUpdate({ skip: true }); } }, inBurst ? 'Passer' : 'Pas maintenant'));
+  const showConfirm = () => { confirmBox.classList.remove('hidden'); };
+  // The question survives the refresh that happens when the person comes back from the listing.
+  const main = el('button', { class: 'btn primary big', onclick: async () => { state.pendingConfirm = v.id; await openAndCopy(v, ta ? ta.value : v.message); showConfirm(); confirmBox.scrollIntoView({ block: 'nearest' }); } }, svg('open'), 'Ouvrir l’annonce et copier le message');
+  if (state.pendingConfirm === v.id && v.status === 'nouveau' && v.matched) showConfirm();
+  let primary = null; // the big button, placed by the caller (first on a card, last and sticky on the full view)
 
   if (!v.matched) {
     actions.append(el('ul', { class: 'reasons' }, v.reasons.map((r) => el('li', {}, r))),
@@ -273,8 +378,8 @@ function vehicleActions(v, ta, { afterUpdate, inBurst = false } = {}) {
         el('a', { class: 'btn', href: v.url, target: '_blank', rel: 'noopener' }, svg('open'), 'Voir l’annonce'),
         el('button', { class: 'btn', onclick: () => update({ keep: true, status: 'nouveau' }, 'Annonce gardée') }, 'Garder quand même')));
   } else if (v.status === 'nouveau') {
-    actions.append(main, confirmBox,
-      el('div', { class: 'secondary' },
+    primary = el('div', { class: 'primary-bar' }, main, confirmBox);
+    actions.append(el('div', { class: 'secondary' },
         el('button', { class: 'btn quiet', onclick: () => update({ status: 'contacte' }, 'Passée en « contactée »') }, 'Déjà contacté'),
         el('button', { class: 'btn quiet', onclick: () => update({ status: 'ignore' }, 'Annonce ignorée') }, 'Ignorer'),
         el('button', { class: 'btn quiet danger', onclick: () => update({ doNotContact: true }, 'Vendeur ajouté à la liste « ne plus contacter »') }, 'Ne plus contacter'),
@@ -283,14 +388,27 @@ function vehicleActions(v, ta, { afterUpdate, inBurst = false } = {}) {
     actions.append(el('div', { class: 'secondary' },
       el('a', { class: 'btn', href: v.url, target: '_blank', rel: 'noopener' }, svg('open'), 'Revoir l’annonce'),
       el('button', { class: 'btn primary', onclick: () => update({ status: 'repondu' }, 'Noté : le vendeur a répondu') }, 'Le vendeur a répondu'),
-      el('button', { class: 'btn quiet', onclick: () => update({ status: 'ignore' }, 'Annonce classée') }, 'Sans suite')));
+      el('button', { class: 'btn quiet', onclick: () => update({ status: 'ignore' }, 'Annonce classée') }, 'Sans suite'),
+      el('button', { class: 'btn quiet', title: 'Si vous l’avez marquée contactée par erreur', onclick: () => update({ status: 'nouveau' }, 'Remise à traiter') }, 'Pas encore contactée')));
   } else {
     actions.append(el('div', { class: 'secondary' },
       el('a', { class: 'btn', href: v.url, target: '_blank', rel: 'noopener' }, svg('open'), 'Voir l’annonce'),
       v.status === 'repondu' ? el('button', { class: 'btn quiet', onclick: () => update({ status: 'ignore' }, 'Annonce classée') }, 'Classer') : null,
       !v.doNotContact ? el('button', { class: 'btn quiet', onclick: () => update({ status: 'nouveau' }, 'Remise à traiter') }, 'Remettre à traiter') : null));
   }
-  return { actions, showConfirm: () => confirmBox.classList.remove('hidden') };
+  return { actions, primary, showConfirm };
+}
+
+/** A private note on the vehicle (what the seller said, a price, when to call back). Saved when the field loses focus. */
+function noteField(v) {
+  const ta = el('textarea', { class: 'input', rows: 2, placeholder: 'Note pour vous : ce que le vendeur a dit, un prix, quand rappeler…', 'aria-label': 'Note' }, v.note || '');
+  ta.addEventListener('input', () => autosize(ta));
+  ta.addEventListener('blur', async () => {
+    if (ta.value === (v.note || '')) return;
+    try { const r = await api('POST', `/api/vehicles/${v.id}`, { note: ta.value }); v.note = r.note; toast(r.note ? 'Note enregistrée' : 'Note effacée'); }
+    catch (err) { toast(err.message, true); }
+  });
+  return el('div', { class: 'vnote-field' }, el('label', {}, svg('pen'), 'Votre note'), ta);
 }
 
 /** Compact card in the list. The photo and the title open the full view. */
@@ -299,14 +417,18 @@ function renderVehicle(v) {
   const badges = vehicleBadges(v);
   const thumb = v.imageUrl ? el('img', { class: 'thumb', src: v.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : el('div', { class: 'thumb empty' }, svg('car'));
   const ta = messageTextarea(v);
-  const { actions } = vehicleActions(v, ta, { afterUpdate: () => render() });
+  const { actions, primary } = vehicleActions(v, ta, { afterUpdate: () => render() });
   const link = (...children) => el('a', { class: 'plain', href: `#/annonce/${v.id}`, 'aria-label': `Voir la fiche : ${v.name}` }, ...children);
 
+  const follow = followUpText(v);
   append(card,
     el('div', { class: 'head' }, link(thumb), el('div', { class: 'title' }, el('h3', { title: v.title }, link(v.name)), el('span', { class: 'sub' }, v.title !== v.name ? v.title : ''), el('span', { class: 'sub' }, [whereText(v), v.siteLabel, fmt.ago(v.firstSeenAt)].filter(Boolean).join(' · ')))),
     specsBlock(v),
     badges.length ? el('div', { class: 'badges' }, badges) : null,
+    follow ? el('p', { class: 'follow' }, follow) : null,
+    v.note ? el('p', { class: 'vnote' }, svg('pen'), el('span', {}, v.note)) : null,
     v.matched && v.status === 'nouveau' ? messageBlock(ta) : null,
+    primary ? el('div', { class: 'actions' }, primary) : null,
     actions,
   );
   return card;
@@ -318,7 +440,8 @@ function vehicleSheet(v, { afterUpdate, inBurst = false }) {
   const badges = vehicleBadges(v);
   const photo = v.imageUrl ? el('a', { class: 'photo', href: v.url, target: '_blank', rel: 'noopener' }, el('img', { src: v.imageUrl, alt: v.title, referrerpolicy: 'no-referrer' })) : el('div', { class: 'photo empty' }, svg('car'));
   const ta = messageTextarea(v);
-  const { actions, showConfirm } = vehicleActions(v, ta, { afterUpdate, inBurst });
+  const { actions, primary, showConfirm } = vehicleActions(v, ta, { afterUpdate, inBurst });
+  if (primary && !inBurst) primary.classList.add('sticky');
   const siteLine = el('div', { class: 'sub' }, [whereText(v), `${v.siteLabel} · ${fmt.ago(v.firstSeenAt)}`].filter(Boolean).join(' · '));
   const others = v.listings.length > 1 ? el('div', { class: 'others' }, 'Aussi sur ', v.listings.slice(1).map((l, i) => [i ? ', ' : '', el('a', { href: l.url, target: '_blank', rel: 'noopener' }, l.siteLabel)])) : null;
   const desc = v.description ? el('details', { class: 'adv desc', open: !inBurst }, el('summary', {}, 'Texte de l’annonce tel que reçu'), el('p', { class: 'desc-text' }, v.description)) : null;
@@ -326,18 +449,23 @@ function vehicleSheet(v, { afterUpdate, inBurst = false }) {
   const message = v.matched && v.status === 'nouveau'
     ? (inBurst ? messageBlock(ta) : el('div', { class: 'message open' }, el('div', { class: 'ta-wrap' }, ta), el('span', { class: 'hint' }, 'Le message proposé, modifiable. Il est copié tel quel.')))
     : null;
+  const follow = followUpText(v);
   // In burst mode the button comes first and the message stays folded: one tap, then paste.
+  // In the full view the button is last and sticky: it stays within reach while the person reads.
   append(sheet,
     photo,
     el('div', { class: 'dhead' }, el('h2', {}, v.name), v.title !== v.name ? el('p', { class: 'muted' }, v.title) : null, siteLine, others),
     specsBlock(v),
     badges.length ? el('div', { class: 'badges' }, badges) : null,
-    inBurst ? actions : message,
+    follow ? el('p', { class: 'follow' }, follow) : null,
+    inBurst ? [primary ? el('div', { class: 'actions' }, primary) : null, actions] : message,
     inBurst ? message : null,
+    inBurst ? null : noteField(v),
     desc,
     inBurst ? null : actions,
+    inBurst ? null : primary,
   );
-  setTimeout(() => autosize(ta), 0);
+  setTimeout(() => { autosize(ta); sheet.querySelectorAll('.vnote-field textarea').forEach(autosize); }, 0);
   return { sheet, showConfirm };
 }
 
@@ -347,7 +475,8 @@ async function renderAnnonceDetail(route) {
   try { v = await api('GET', `/api/vehicles/${id}`); }
   catch (err) { return el('div', { class: 'empty' }, el('b', {}, 'Annonce introuvable'), el('a', { class: 'btn', href: '#/annonces' }, 'Retour aux annonces')); }
   const back = el('a', { class: 'btn quiet back', href: '#/annonces' }, '← Annonces');
-  const { sheet } = vehicleSheet(v, { afterUpdate: async () => { location.hash = '#/annonces'; } });
+  // After an action the list comes back; after an undo made from the list's confirmation, the list refreshes in place.
+  const { sheet } = vehicleSheet(v, { afterUpdate: async () => { if (currentRoute().name === 'annonces') await render(); else location.hash = '#/annonces'; } });
   const remove = el('button', { class: 'btn quiet small danger', onclick: async () => {
     if (!confirm('Supprimer cette annonce de l’application ? Elle reviendra si un site la renvoie.')) return;
     try { await api('DELETE', `/api/vehicles/${v.id}`); toast('Annonce supprimée'); location.hash = '#/annonces'; } catch (err) { toast(err.message, true); }
@@ -386,10 +515,17 @@ async function renderRafale() {
     const { sheet, showConfirm } = vehicleSheet(v, {
       inBurst: true,
       afterUpdate: async (patch) => {
-        if (patch.skip) r.skipped++;
-        else if (patch.status === 'contacte') r.sent++;
-        else if (patch.status === 'ignore' || patch.doNotContact) r.ignored++;
-        r.index++;
+        if (patch.undone) {
+          const u = patch.undone;
+          if (u.status === 'contacte') r.sent = Math.max(0, r.sent - 1);
+          else if (u.status === 'ignore' || u.doNotContact) r.ignored = Math.max(0, r.ignored - 1);
+          r.index = Math.max(0, r.index - 1);
+        } else {
+          if (patch.skip) r.skipped++;
+          else if (patch.status === 'contacte') r.sent++;
+          else if (patch.status === 'ignore' || patch.doNotContact) r.ignored++;
+          r.index++;
+        }
         window.scrollTo({ top: 0 });
         draw();
       },
@@ -431,9 +567,11 @@ function onDraftChange() {
   previewDebounced();
 }
 
+/** Unsaved changes in the shared draft? When there are none, the draft is reloaded so the screen shows what the server has. */
+const draftDirty = () => Boolean(state.settings && state.draft && JSON.stringify(state.draft) !== JSON.stringify(state.settings));
+
 async function renderReglages() {
-  if (!state.settings) await loadSettings();
-  else state.draft = state.draft || clone(state.settings);
+  if (!state.settings || !draftDirty()) await loadSettings();
   const d = state.draft;
   state.preview = null; previewDebounced();
 
@@ -562,13 +700,14 @@ async function enablePush() {
     state.pushStatus = 'active';
     const s = document.getElementById('push-status'); if (s) s.textContent = pushStatusText();
     toast('Notifications activées sur cet appareil.');
+    if (state.route === 'annonces') render();
   } catch (e) { toast(e.message, true); }
 }
 
 // ---------- écran Messages ----------
 async function renderMessages() {
-  if (!state.settings) await loadSettings();
-  const d = state.draft || (state.draft = clone(state.settings));
+  if (!state.settings || !draftDirty()) await loadSettings();
+  const d = state.draft;
   const fams = state.settingsMeta.families;
   let current = state.currentFamily || fams[0].key;
   const vars = state.settingsMeta.variables;
@@ -617,8 +756,8 @@ async function renderMessages() {
 
 // ---------- écran Sources ----------
 async function renderSources() {
-  if (!state.settings) await loadSettings();
-  const d = state.draft || (state.draft = clone(state.settings));
+  if (!state.settings || !draftDirty()) await loadSettings();
+  const d = state.draft;
   const src = await api('GET', '/api/sources');
   state.sources = src;
 
@@ -647,18 +786,38 @@ async function renderSources() {
       el('button', { class: 'btn primary', onclick: async () => { try { const r = await api('PUT', '/api/settings', state.draft); state.settings = r.settings; state.draft = clone(r.settings); toast('Boîte mail enregistrée'); await render(); } catch (e) { toast(e.message, true); } } }, 'Enregistrer')),
     mailMsg);
 
-  // Sites
-  const MAIN = ['leboncoin', 'lacentrale', 'autoscout24', 'paruvendu'];
-  const siteRow = (s) => el('div', { class: 'site' },
-    el('div', { class: 'shead' }, el('h3', {}, s.label), el('label', { class: 'row small muted' }, el('input', { type: 'checkbox', checked: Boolean(d.alertsDone?.[s.key]), onchange: async (e) => {
-      d.alertsDone = { ...(d.alertsDone || {}), [s.key]: e.target.checked };
-      try { const r = await api('PUT', '/api/settings', state.draft); state.settings = r.settings; state.draft = clone(r.settings); toast(e.target.checked ? `Alerte ${s.label} notée comme créée` : 'Noté'); } catch (err) { toast(err.message, true); }
-    } }), 'Alerte créée')),
-    el('p', { class: 'small' }, el('a', { href: s.searchUrl, target: '_blank', rel: 'noopener' }, s.prefilled ? 'Ouvrir la recherche pré-remplie' : 'Ouvrir le site'), ' puis ', s.help.charAt(0).toLowerCase() + s.help.slice(1)));
-  const sites = el('section', { class: 'card section' }, el('h2', {}, 'Créer les alertes sur les sites'),
-    el('p', { class: 'muted small' }, 'À faire une seule fois. Sur chaque site : une recherche large (toutes marques, particuliers, votre ville et votre rayon, kilométrage maximum), puis « créer une alerte » vers l’adresse Gmail dédiée, en réception immédiate quand le site le propose. Le tri fin se fait ici, dans Réglages.'),
-    ...src.sites.filter((s) => MAIN.includes(s.key)).map(siteRow),
-    el('details', { class: 'adv' }, el('summary', {}, 'Autres sites, facultatifs'), el('div', { class: 'body' }, ...src.sites.filter((s) => !MAIN.includes(s.key)).map(siteRow))));
+  // Sites : l'état de l'alerte sur chacun, lu dans l'email de confirmation du site quand il existe.
+  const setDone = async (s, done) => {
+    d.alertsDone = { ...(d.alertsDone || {}), [s.key]: done };
+    try { const r = await api('PUT', '/api/settings', state.draft); state.settings = r.settings; state.draft = clone(r.settings); toast(done ? `Alerte ${s.label} notée comme créée` : 'Noté'); await render(); } catch (err) { toast(err.message, true); }
+  };
+  const siteRow = (s) => {
+    const a = s.alert;
+    const done = Boolean(s.done || a);
+    const status = a ? el('span', { class: 'badge ok' }, 'Alerte active') : done ? el('span', { class: 'badge ok' }, 'Alerte créée') : el('span', { class: 'badge warn' }, 'À créer');
+    const manage = (a && a.manageUrl) || s.manageUrl || s.searchUrl;
+    const confirmed = a ? el('p', { class: 'small' }, el('b', {}, 'Ce que le site enverra : '), a.criteria, a.confirmedAt ? el('span', { class: 'muted' }, ` (confirmé par le site ${fmt.ago(a.confirmedAt)})`) : null) : null;
+    const issues = (s.issues || []).map((m) => el('div', { class: 'note warn' }, m));
+    if (!issues.length && s.advice) issues.push(el('div', { class: 'note' }, s.advice));
+    const howTo = el('p', { class: 'small muted' }, s.prefilled ? `La recherche pré-remplie prend ${s.alertRadiusKm} km autour de ${d.zone.city || 'la ville'}, ${fmt.int(s.alertMaxKm)} km au compteur maximum, vendeurs particuliers, toutes marques : exprès plus large que vos réglages. ` : '', s.help);
+    const buttons = done
+      ? el('div', { class: 'row' },
+        el('a', { class: 'btn small', href: manage, target: '_blank', rel: 'noopener' }, svg('open'), 'Modifier l’alerte sur le site'),
+        a ? null : el('button', { class: 'btn quiet small', type: 'button', onclick: () => setDone(s, false) }, 'Pas encore créée'))
+      : el('div', { class: 'row' },
+        el('a', { class: 'btn primary small', href: s.searchUrl, target: '_blank', rel: 'noopener' }, svg('open'), s.prefilled ? 'Créer l’alerte (recherche pré-remplie)' : 'Créer l’alerte sur le site'),
+        el('button', { class: 'btn quiet small', type: 'button', onclick: () => setDone(s, true) }, 'C’est fait'));
+    return el('div', { class: 'site' },
+      el('div', { class: 'shead' }, el('h3', {}, s.label), status),
+      confirmed,
+      ...issues,
+      done && !issues.length ? null : howTo,
+      buttons);
+  };
+  const sites = el('section', { class: 'card section' }, el('h2', {}, 'Les alertes sur les sites'),
+    el('p', { class: 'muted small' }, 'Chaque site envoie ses nouvelles annonces à la boîte mail ci-dessus. L’alerte se crée une fois, sur le site, et volontairement large (toutes marques, particuliers, un rayon et un kilométrage plus grands que vos réglages) : c’est l’application qui trie, et ce qu’elle écarte reste consultable dans « Écartées par les filtres ». Quand le site confirme l’alerte par email, elle apparaît ci-dessous avec ses critères.'),
+    ...src.sites.filter((s) => MAIN_SITES.includes(s.key)).map(siteRow),
+    el('details', { class: 'adv' }, el('summary', {}, 'Autres sites, facultatifs'), el('div', { class: 'body' }, ...src.sites.filter((s) => !MAIN_SITES.includes(s.key)).map(siteRow))));
 
   // Lecture directe
   const httpList = el('div', { class: 'stack' });
@@ -674,8 +833,8 @@ async function renderSources() {
   drawHttp();
   const newSite = { name: '', url: '' };
   const testMsg = el('div');
-  const http = el('section', { class: 'card section' }, el('h2', {}, 'Autres sites, en lecture directe'),
-    el('p', { class: 'muted small' }, 'Pour un site sans alerte email : collez l’adresse d’une page de résultats de recherche. L’application la relit toutes les 30 minutes, seulement si le site autorise la lecture automatique (sinon elle vous le dit, et l’alerte email reste la solution).'),
+  const http = el('section', { class: 'card section' }, el('h2', {}, 'Un site sans alerte email'),
+    el('p', { class: 'muted small' }, 'Réservé aux sites qui ne proposent pas d’alerte : collez l’adresse d’une page de résultats de recherche. L’application la relit toutes les 30 minutes, seulement si le site autorise la lecture automatique (sinon elle vous le dit).'),
     httpList,
     el('div', { class: 'grid2' }, field('Nom du site', text(newSite, 'name', { placeholder: 'Annonces-Automobile' })), field('Adresse de la page de résultats', text(newSite, 'url', { type: 'url', placeholder: 'https://…' }))),
     el('div', { class: 'row' },
@@ -696,13 +855,15 @@ async function renderSources() {
     src.emails.length
       ? el('table', { class: 'emails' }, el('thead', {}, el('tr', {}, el('th', {}, 'Reçu'), el('th', {}, 'Site'), el('th', {}, 'Sujet'), el('th', { class: 'n' }, 'Annonces'))),
         el('tbody', {}, src.emails.map((e) => {
-          const tr = el('tr', { style: 'cursor:pointer', onclick: () => { detail.classList.toggle('hidden'); } }, el('td', {}, fmt.ago(e.received_at || e.processed_at)), el('td', {}, e.site || e.sender), el('td', { class: 'ellip', title: e.subject }, e.subject), el('td', { class: 'n' }, e.error ? el('span', { class: 'badge warn' }, 'Erreur') : e.parsed_count));
+          const tr = el('tr', { style: 'cursor:pointer', onclick: () => { detail.classList.toggle('hidden'); } }, el('td', {}, fmt.ago(e.received_at || e.processed_at)), el('td', {}, e.site || e.sender), el('td', { class: 'ellip', title: e.subject }, e.subject), el('td', { class: 'n' }, e.error ? el('span', { class: 'badge warn' }, 'Erreur') : [String(e.parsed_count), el('span', { class: 'unit' }, e.parsed_count > 1 ? ' annonces' : ' annonce')]));
           const detail = el('tr', { class: 'hidden' }, el('td', { colspan: 4 }, e.error ? el('div', { class: 'note warn' }, e.error) : (e.parsed?.listings?.length ? el('ul', { style: 'margin:0;padding-left:18px' }, e.parsed.listings.map((l) => el('li', {}, `${l.title}${l.price ? ', ' + fmt.int(l.price) + ' €' : ''}${l.km ? ', ' + fmt.int(l.km) + ' km' : ''}${l.year ? ', ' + l.year : ''}${l.city ? ', ' + l.city : ''}${l.sellerType === 'pro' ? ' (pro)' : ''}`))) : el('span', { class: 'muted small' }, `Aucune annonce reconnue dans cet email${e.parsed?.pending ? ' (' + e.parsed.pending + ' lien(s) non résolus)' : ''}.`))));
           return [tr, detail];
         })))
       : el('p', { class: 'muted small' }, 'Aucun email traité pour le moment.'));
 
-  return [el('div', { class: 'headline' }, el('h1', {}, 'Sources'), el('p', { class: 'muted' }, 'D’où viennent les annonces, et comment vérifier que tout fonctionne.')), mailbox, sites, http, journal];
+  const advanced = el('details', { class: 'adv card section', open: d.httpSites.length > 0 }, el('summary', {}, 'Avancé : un site sans alerte email'), el('div', { class: 'body' }, http));
+  http.classList.remove('card');
+  return [el('div', { class: 'headline' }, el('h1', {}, 'Sites'), el('p', { class: 'muted' }, 'D’où viennent les annonces, et comment vérifier que tout fonctionne.')), mailbox, sites, journal, advanced];
 }
 
 // ---------- démarrage ----------

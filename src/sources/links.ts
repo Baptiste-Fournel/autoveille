@@ -7,6 +7,20 @@ export interface SiteSetup {
   searchUrl: string;
   prefilled: boolean;
   help: string;
+  manageUrl?: string;
+  /** The net the alert should cast: wider than the settings, since the app sorts afterwards. */
+  alertRadiusKm: number;
+  alertMaxKm: number;
+}
+
+/** A site alert is cast wider than the settings: the app does the fine sorting, and what it sets aside stays readable. */
+export function alertBounds(settings: Settings): { radiusKm: number; maxKm: number } {
+  const radius = settings.zone.radiusKm || 100;
+  const km = settings.maxKm || 100000;
+  return {
+    radiusKm: Math.min(400, Math.max(150, Math.ceil((radius * 1.5) / 50) * 50)),
+    maxKm: Math.min(300000, Math.max(150000, Math.ceil((km * 1.5) / 10000) * 10000)),
+  };
 }
 
 /**
@@ -14,12 +28,13 @@ export interface SiteSetup {
  * URL parameters are known. The person opens the link, checks the criteria, and clicks "créer une alerte".
  */
 export function siteSetups(settings: Settings): SiteSetup[] {
-  const { zone, maxKm } = settings;
-  const radius = zone.radiusKm || 100;
+  const { zone } = settings;
+  const bounds = alertBounds(settings);
+  const radius = bounds.radiusKm;
   const city = zone.city || 'Bordeaux';
   const postal = zone.postalCode || '33000';
   const lat = zone.lat ?? 44.8378, lon = zone.lon ?? -0.5792;
-  const km = maxKm || 100000;
+  const km = bounds.maxKm;
   const urls: Record<string, { url: string; prefilled: boolean }> = {
     leboncoin: {
       url: `https://www.leboncoin.fr/recherche?category=2&locations=${encodeURIComponent(city)}__${lat.toFixed(4)}_${lon.toFixed(4)}_5000_${radius * 1000}&owner_type=private&mileage=min-${km}`,
@@ -43,5 +58,8 @@ export function siteSetups(settings: Settings): SiteSetup[] {
     searchUrl: urls[s.key]?.url ?? '',
     prefilled: urls[s.key]?.prefilled ?? false,
     help: s.alertHelp,
+    manageUrl: s.manageUrl,
+    alertRadiusKm: bounds.radiusKm,
+    alertMaxKm: bounds.maxKm,
   }));
 }

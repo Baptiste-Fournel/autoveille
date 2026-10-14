@@ -8,11 +8,13 @@ Les sites d'annonces (Leboncoin, La Centrale, AutoScout24, ParuVendu) envoient e
 
 ## Mise en route, une seule fois (un quart d'heure)
 
-1. **Ouvrir l'application** à l'adresse fournie, saisir le code de première connexion, choisir un mot de passe. Sur le téléphone, faire ensuite « Ajouter à l'écran d'accueil » pour l'avoir comme une appli.
+L'écran Annonces affiche une carte **Mise en route** avec ces étapes, cochées au fur et à mesure ; elle disparaît quand tout est fait.
+
+1. **Ouvrir l'application** à l'adresse fournie, choisir un mot de passe. Sur le téléphone, faire ensuite « Ajouter à l'écran d'accueil » pour l'avoir comme une appli.
 2. **Réglages** : prénom, nom, concession, ville, téléphone (ils remplissent les messages). Ville de référence et rayon. Kilométrage maximum. Vérifier les familles de marques activées.
-3. **Sources, boîte mail** : créer une adresse Gmail dédiée (par exemple alertes.nomdelaconcession@gmail.com). Dans le compte Google : Sécurité, activer la validation en deux étapes, puis « Mots de passe des applications », créer un mot de passe nommé AutoVeille et le coller dans l'application. Tester la connexion, enregistrer.
-4. **Sources, créer les alertes** : pour chacun des quatre sites, ouvrir le lien de recherche proposé, vérifier les critères (toutes marques, particuliers, votre ville et votre rayon, kilométrage maximum), puis « créer une alerte » vers l'adresse Gmail dédiée, en réception immédiate si le site le propose. Une seule alerte large par site : c'est AutoVeille qui trie finement.
-5. **Notifications** : dans Réglages, « Activer sur cet appareil » sur le téléphone (après l'ajout à l'écran d'accueil sur iPhone). « Envoyer un test » pour vérifier.
+3. **Sites, boîte mail** : créer une adresse Gmail dédiée (par exemple alertes.nomdelaconcession@gmail.com). Dans le compte Google : Sécurité, activer la validation en deux étapes, puis « Mots de passe des applications », créer un mot de passe nommé AutoVeille et le coller dans l'application. Tester la connexion, enregistrer.
+4. **Sites, les alertes** : pour chacun des quatre sites, « Créer l'alerte » ouvre une recherche pré-remplie, volontairement plus large que vos réglages (150 km, 150 000 km, particuliers, toutes marques) : c'est AutoVeille qui trie, et ce qu'elle écarte reste consultable. Sur le site, « créer une alerte » vers l'adresse Gmail dédiée, en réception immédiate quand c'est proposé. Dès que le site confirme l'alerte par email, elle apparaît dans l'application avec ses critères, et un bouton « Modifier l'alerte sur le site » mène directement à la page où la changer. Si une alerte est plus étroite que vos réglages, l'application le signale.
+5. **Notifications** : « Activer » dans la carte Mise en route, ou dans Réglages, sur le téléphone (après l'ajout à l'écran d'accueil sur iPhone). « Envoyer un test » pour vérifier.
 
 ## Au quotidien
 
@@ -23,11 +25,17 @@ Les sites d'annonces (Leboncoin, La Centrale, AutoScout24, ParuVendu) envoient e
 
 Pas intéressé : **Ignorer**. Un vendeur demande à ne plus être sollicité : **Ne plus contacter**, il est mis de côté définitivement.
 
-Toucher la photo ou le titre d'une annonce ouvre sa **fiche** : grande photo, caractéristiques, texte de l'annonce tel que reçu, message modifiable, sans quitter l'application.
+Un doigt qui glisse : chaque changement affiche « Annuler » pendant quelques secondes, et une annonce passée dans « Contactées » par erreur a un bouton **Pas encore contactée** qui la remet à traiter.
+
+Toucher la photo ou le titre d'une annonce ouvre sa **fiche** : grande photo, caractéristiques, texte de l'annonce tel que reçu, message modifiable, et une **note** pour vous (ce que le vendeur a dit, un prix, quand rappeler), visible ensuite sur la carte. Le bouton principal reste au bas de l'écran pendant la lecture.
+
+Dans « Contactées », chaque carte indique depuis combien de jours le vendeur a été contacté ; dans « Ont répondu », depuis quand. Une ligne en haut de l'écran résume les sept derniers jours : annonces retenues, contactées, réponses. Dès que la liste s'allonge, un champ de recherche filtre par modèle, marque ou ville.
 
 Plusieurs annonces à traiter : **Traiter en rafale**. Elles défilent une par une : « Ouvrir l'annonce et copier le message », coller, envoyer, revenir ; l'application demande « Message envoyé ? » et passe à la suivante. Dix annonces se traitent en une minute, et chaque envoi reste le vôtre.
 
-Une annonce dont le prix baisse ou qui est republiée garde son état ; une étiquette « Prix baissé » ou « Republiée » apparaît, sans nouvelle sollicitation.
+Une annonce dont le prix baisse ou qui est republiée garde son état ; une étiquette « Prix baissé » ou « Republiée » apparaît. Quand le prix baisse sur une voiture encore en jeu (à traiter ou contactée), une notification « Prix baissé » prévient : c'est souvent le bon moment.
+
+**Écartées par les filtres** mérite un coup d'œil de temps en temps : les alertes des sites étant larges, une bonne affaire peut s'y cacher. Les annonces y sont regroupées par raison (marques suivies, trop loin, trop de kilomètres, ni supercar ni collection, vendeur pro, autres marques) ; « Garder quand même » remet une annonce à traiter.
 
 ## Réglages
 
@@ -43,9 +51,10 @@ Un message par famille, avec plusieurs variantes tirées au hasard pour ne pas e
 
 ## Si quelque chose ne va pas
 
-- Aucune annonce n'arrive : dans **Sources**, vérifier que la boîte mail est « Fonctionne » et que le journal « Derniers emails reçus » montre des emails. S'il est vide, les alertes ne sont pas créées sur les sites ou n'arrivent pas sur la bonne adresse.
+- Aucune annonce n'arrive : dans **Sites**, vérifier que la boîte mail est « Fonctionne » et que le journal « Derniers emails reçus » montre des emails. S'il est vide, les alertes ne sont pas créées sur les sites ou n'arrivent pas sur la bonne adresse.
 - Un email est reçu mais « aucune annonce reconnue » : le site a changé le format de ses emails. Le transmettre à la personne qui maintient l'outil (télécharger l'email en .eml depuis Gmail).
 - Une voiture a été écartée à tort : onglet « Écartées par les filtres », la raison est affichée, « Garder quand même » la remet dans la file.
+- Après une mise à jour de l'application : dans **Sites**, « Tout relire » relit toute la boîte mail ; les annonces connues sont complétées, pas dupliquées.
 
 ## Ce que l'application ne fait pas
 

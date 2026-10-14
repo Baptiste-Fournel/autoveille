@@ -166,6 +166,7 @@ export function defaultSettings(): Settings {
     privateOnly: true,
     specialOnly: true,
     alertsDone: {},
+    alerts: {},
     families: {
       allemandes: familyRules('allemandes'),
       italiennes: familyRules('italiennes'),
@@ -205,6 +206,7 @@ export function mergeSettings(stored: Partial<Settings> | undefined): Settings {
     privateOnly: stored.privateOnly ?? d.privateOnly,
     specialOnly: stored.specialOnly ?? d.specialOnly,
     alertsDone: { ...(stored.alertsDone ?? {}) },
+    alerts: { ...(stored.alerts ?? {}) },
     families: { ...d.families },
     templates: { ...d.templates },
     notifications: { ...d.notifications, ...(stored.notifications ?? {}) },

@@ -15,11 +15,12 @@ describe('pipeline', () => {
   let store: Store;
   let pipeline: Pipeline;
   const notified: string[] = [];
+  const drops: string[] = [];
 
   beforeEach(() => {
     store = new Store(':memory:');
-    notified.length = 0;
-    pipeline = new Pipeline(store, { newVehicle: async (v) => { notified.push(v.fingerprint); } });
+    notified.length = 0; drops.length = 0;
+    pipeline = new Pipeline(store, { newVehicle: async (v) => { notified.push(v.fingerprint); }, priceDrop: async (v, _raw, from, to) => { drops.push(`${v.id}:${from}>${to}`); } });
   });
 
   it('creates, matches and notifies a new vehicle, with distance from the built-in table', async () => {
@@ -48,6 +49,12 @@ describe('pipeline', () => {
     expect(store.priceHistory(1)).toHaveLength(2);
     expect(notified).toHaveLength(1);
     expect(store.getVehicle(1)!.status).toBe('nouveau');
+    expect(drops).toEqual(['1:89900>84900']);
+    // A rise is not a nudge; a drop on an ignored vehicle is not one either.
+    await pipeline.ingest(raw({ price: 86900 }));
+    store.updateVehicle(1, { status: 'ignore' });
+    await pipeline.ingest(raw({ price: 80000 }));
+    expect(drops).toHaveLength(1);
   });
 
   it('treats a repost (new id, same car) as the same vehicle, keeping its status', async () => {

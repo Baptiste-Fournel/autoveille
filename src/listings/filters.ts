@@ -27,6 +27,18 @@ export function specialReason(family: Family, info: VehicleInfo, raw: RawListing
   return undefined;
 }
 
+export type ReasonKind = 'marque' | 'special' | 'pro' | 'km' | 'loin' | 'autre';
+
+/** The family of a refusal reason, for the « écartées » screen filters. */
+export function reasonKind(reason: string): ReasonKind {
+  if (/^marque /i.test(reason)) return 'marque';
+  if (/^ni supercar/i.test(reason)) return 'special';
+  if (/^vendeur professionnel/i.test(reason)) return 'pro';
+  if (/hors du rayon/i.test(reason)) return 'loin';
+  if (/au-dessus de .* km/i.test(reason)) return 'km';
+  return 'autre';
+}
+
 export interface EvalContext {
   distanceKm?: number | null;
 }

@@ -43,6 +43,20 @@ export class AppNotifier implements Notifier {
     await Promise.all(tasks);
   }
 
+  async priceDrop(vehicle: VehicleRow, raw: RawListing, from: number, to: number): Promise<void> {
+    const settings = this.store.getSettings();
+    const name = [vehicle.make, vehicle.model].filter(Boolean).join(' ') || raw.title;
+    const title = `Prix baissé : ${name}`;
+    const body = `${fmtInt(from)} € → ${fmtInt(to)} €${vehicle.status === 'contacte' ? ' • vendeur déjà contacté' : ''} • ${raw.siteLabel}`;
+    const url = `${this.baseUrl()}/#/annonce/${vehicle.id}`;
+    const tasks: Promise<unknown>[] = [];
+    if (settings.notifications.push && pushAvailable(this.cfg)) tasks.push(this.sendPush({ title, body, url, vehicleId: vehicle.id }));
+    if (settings.notifications.telegramToken && settings.notifications.telegramChatId) {
+      tasks.push(this.sendTelegram(settings.notifications.telegramToken, settings.notifications.telegramChatId, `${title}\n${body}\n${url}`));
+    }
+    await Promise.all(tasks);
+  }
+
   async sendPush(payload: { title: string; body: string; url: string; vehicleId?: number }): Promise<{ sent: number; removed: number }> {
     let sent = 0, removed = 0;
     for (const sub of this.store.pushSubscriptions()) {

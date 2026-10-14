@@ -72,3 +72,15 @@ describe('filters', () => {
     expect(evaluate(r, extractVehicleInfo(r), settings, { distanceKm: null }).pass).toBe(true);
   });
 });
+
+describe('reasonKind', () => {
+  it('groups the refusal reasons', async () => {
+    const { reasonKind } = await import('./filters.js');
+    expect(reasonKind('marque Dacia hors des familles suivies')).toBe('marque');
+    expect(reasonKind('marque non reconnue')).toBe('marque');
+    expect(reasonKind('ni supercar ni collection selon les réglages')).toBe('special');
+    expect(reasonKind('vendeur professionnel')).toBe('pro');
+    expect(reasonKind('à 140 km, hors du rayon de 100 km')).toBe('loin');
+    expect(reasonKind('120 000 km, au-dessus de 100 000 km')).toBe('km');
+  });
+});

@@ -11,6 +11,8 @@ export interface SiteDef {
   /** Sender domains of alert emails. */
   senders: string[];
   alertHelp: string;
+  /** Page of the site where the person sees and edits the saved search / alert. */
+  manageUrl?: string;
 }
 
 export const SITES: SiteDef[] = [
@@ -18,21 +20,25 @@ export const SITES: SiteDef[] = [
     key: 'leboncoin', label: 'Leboncoin', hosts: ['leboncoin.fr'], senders: ['leboncoin.fr'],
     listing: [/^\/ad\/[a-z_-]+\/(\d{6,})/i, /^\/voitures\/(\d{6,})\.htm/i, /^\/vi\/(\d{6,})/i],
     alertHelp: 'Faites une recherche dans Véhicules > Voitures avec vos critères (marque, rayon autour de la ville, kilométrage, vendeur particulier), puis « Sauvegarder la recherche » et activez l’alerte par email.',
+    manageUrl: 'https://www.leboncoin.fr/mes-recherches',
   },
   {
     key: 'lacentrale', label: 'La Centrale', hosts: ['lacentrale.fr'], senders: ['lacentrale.fr'],
     listing: [/^\/auto-occasion-annonce-(\d{6,})\.html/i, /^\/annonce[^/]*\/(\d{6,})/i],
     alertHelp: 'Lancez une recherche avec vos critères, puis « Créer une alerte » (compte gratuit) et choisissez la réception par email à chaque nouvelle annonce.',
+    manageUrl: 'https://www.lacentrale.fr/compte/notification/recherche',
   },
   {
     key: 'autoscout24', label: 'AutoScout24', hosts: ['autoscout24.fr', 'autoscout24.com'], senders: ['autoscout24.fr', 'autoscout24.com'],
     listing: [/^\/annonces\/.*-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i, /^\/offres\/.*-([0-9a-f-]{20,})/i],
-    alertHelp: 'Après une recherche, utilisez « Enregistrer la recherche » puis activez les notifications par email dans votre compte.',
+    alertHelp: 'Après une recherche, utilisez « Sauver la recherche », puis dans Mon AutoScout24 > Recherches sauvegardées, activez « Alertez-moi par e-mail » (il est désactivé par défaut).',
+    manageUrl: 'https://www.autoscout24.fr/account/searches',
   },
   {
     key: 'paruvendu', label: 'ParuVendu', hosts: ['paruvendu.fr'], senders: ['paruvendu.fr'],
     listing: [/^\/a\/voiture-occasion\/[^/]+\/[^/]+\/([A-Za-z0-9]{6,})/i, /^\/a\/[^/]+\/.*\/([A-Za-z0-9]{8,})\/?$/i],
     alertHelp: 'Depuis la liste de résultats, cliquez « Créer une alerte » et renseignez l’adresse email dédiée.',
+    manageUrl: 'https://www.paruvendu.fr/utilisateurparticulierfo/default/accueilCompte/',
   },
   {
     key: 'largus', label: 'L’argus', hosts: ['largus.fr', 'occasion.largus.fr'], senders: ['largus.fr'],

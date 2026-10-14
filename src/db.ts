@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Family, RawListing, SellerType, Settings, Status } from './types.js';
+import type { AlertInfo, Family, RawListing, SellerType, Settings, Status } from './types.js';
 import { defaultSettings, mergeSettings } from './listings/defaults.js';
 
 export interface VehicleRow {
@@ -28,6 +28,8 @@ export interface VehicleRow {
   notified_at: string | null;
   price_dropped: number;
   reposted: number;
+  /** Free text the person keeps on the vehicle (an appointment, the price asked...). */
+  note: string | null;
 }
 
 export interface ListingRow {
@@ -118,6 +120,8 @@ export class Store {
     // Colonnes ajoutées après la première version : ajout sans perte sur une base existante.
     const cols = (this.db.prepare('PRAGMA table_info(listings)').all() as Array<{ name: string }>).map((c) => c.name);
     if (!cols.includes('description')) this.db.exec('ALTER TABLE listings ADD COLUMN description TEXT');
+    const vcols = (this.db.prepare('PRAGMA table_info(vehicles)').all() as Array<{ name: string }>).map((c) => c.name);
+    if (!vcols.includes('note')) this.db.exec('ALTER TABLE vehicles ADD COLUMN note TEXT');
   }
 
   // ---------- settings ----------
@@ -200,6 +204,29 @@ export class Store {
   /** Removes one vehicle with its listings, prices and events (a wrongly read email, say). */
   deleteVehicle(id: number): void {
     this.db.prepare('DELETE FROM vehicles WHERE id = ?').run(id);
+  }
+
+  /** When the vehicle last entered a status (contacted, replied...), from the events. */
+  lastEventAt(vehicleId: number, type: string): string | null {
+    const r = this.db.prepare('SELECT at FROM events WHERE vehicle_id = ? AND type = ? ORDER BY at DESC LIMIT 1').get(vehicleId, type) as { at: string } | undefined;
+    return r?.at ?? null;
+  }
+
+  /** The week at a glance: listings kept by the filters, contacts made, answers received. */
+  weekStats(days = 7): { received: number; contacted: number; replied: number } {
+    const since = new Date(Date.now() - days * 86400_000).toISOString();
+    const received = (this.db.prepare('SELECT COUNT(*) n FROM vehicles WHERE matched = 1 AND first_seen_at >= ?').get(since) as { n: number }).n;
+    const contacted = (this.db.prepare("SELECT COUNT(DISTINCT vehicle_id) n FROM events WHERE type = 'statut_contacte' AND at >= ?").get(since) as { n: number }).n;
+    const replied = (this.db.prepare("SELECT COUNT(DISTINCT vehicle_id) n FROM events WHERE type = 'statut_repondu' AND at >= ?").get(since) as { n: number }).n;
+    return { received, contacted, replied };
+  }
+
+  /** A site confirmed its alert by email: tick the site and keep what it said. */
+  recordAlert(info: AlertInfo): void {
+    const s = this.getSettings();
+    s.alertsDone = { ...s.alertsDone, [info.site]: true };
+    s.alerts = { ...s.alerts, [info.site]: info };
+    this.saveSettings(s);
   }
 
   /** Forget which emails were read, so the next check reads the mailbox again from the start. */

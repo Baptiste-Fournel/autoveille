@@ -44,6 +44,13 @@ describe('templates', () => {
   });
 
   it('flags dashes, emoji and stock phrases', () => {
-    expect(lintTemplate('Bonjour — n\'hésitez pas 🙂 {telephone}').length).toBe(3);
+    expect(lintTemplate('Bonjour — n\'hésitez pas 🙂 {telephone}, je n\'insisterai pas.').length).toBe(3);
+  });
+
+  it('asks for the opt-out sentence and a way to be reached', () => {
+    const w = lintTemplate('Bonjour, votre {modele} est belle.');
+    expect(w.some((x) => /joindre/.test(x))).toBe(true);
+    expect(w.some((x) => /insisterez pas/.test(x))).toBe(true);
+    expect(lintTemplate('Appelez-moi au {telephone}. Sinon je ne reviendrai pas vers vous.')).toEqual([]);
   });
 });

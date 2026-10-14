@@ -4,6 +4,7 @@ import type { Store } from '../../db.js';
 import type { Pipeline } from '../../pipeline.js';
 import { resolveRedirect } from '../sites.js';
 import { parseAlertEmail } from './parse.js';
+import { detectAlertConfirmation } from './confirmations.js';
 
 export interface ImapConfig { host: string; port: number; user: string; pass: string; mailbox: string }
 
@@ -47,6 +48,9 @@ export async function pollMailbox(cfg: ImapConfig, store: Store, pipeline: Pipel
           const from = parsed.from?.value?.[0]?.address ?? '';
           const subject = parsed.subject ?? '';
           const input = { html: typeof parsed.html === 'string' ? parsed.html : undefined, text: parsed.text, subject, from, date: parsed.date, messageId };
+
+          const confirmation = detectAlertConfirmation({ from, subject, html: input.html, text: input.text, date: parsed.date });
+          if (confirmation) { store.recordAlert(confirmation); log(`alerte ${confirmation.site} confirmée par email : ${confirmation.criteria}`); }
 
           let out = parseAlertEmail(input);
           if (out.pending.length) {

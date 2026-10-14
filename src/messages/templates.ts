@@ -108,5 +108,6 @@ export function lintTemplate(text: string): string[] {
   if (/^\s*[-*•]\s/m.test(text)) warnings.push('Contient une liste à puces.');
   if (/n'hésitez pas|je me permets|dans le cadre de|je reste à votre (entière )?disposition/i.test(text)) warnings.push('Formule toute faite repérée (« n\'hésitez pas », « je me permets »…), à reformuler.');
   if (!/\{telephone\}/.test(text) && !/\d{2}[ .]?\d{2}[ .]?\d{2}[ .]?\d{2}[ .]?\d{2}/.test(text)) warnings.push('Aucun moyen de vous joindre dans le message : la loi impose une coordonnée valable pour demander l\'arrêt des envois.');
+  if (!/n['’]insisterai pas|ne (vous )?relancerai pas|ne (vous )?recontacterai pas|ne reviendrai pas vers vous|pas de relance|sans suite de ma part|ne vous solliciterai plus|sans insister/i.test(text)) warnings.push('Le message ne dit pas que vous n\'insisterez pas si le vendeur ne répond pas : c\'est la phrase qui vous met en règle quand vous contactez un particulier.');
   return warnings;
 }

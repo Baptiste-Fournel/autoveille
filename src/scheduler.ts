@@ -7,7 +7,7 @@ export interface RunSummary { source: string; ok: boolean; detail: string }
 
 /** Runs the mail poll and the HTTP sites on their own cadence, never two runs of the same source at once. */
 export class Scheduler {
-  private mailBusy = false;
+  private mailRun: Promise<RunSummary> | null = null;
   private httpBusy = false;
   private timers: NodeJS.Timeout[] = [];
 
@@ -21,11 +21,19 @@ export class Scheduler {
 
   stop(): void { this.timers.forEach(clearInterval); this.timers = []; }
 
+  /** Resolves once no mail run is in progress. */
+  async idleMail(): Promise<void> { if (this.mailRun) await this.mailRun.catch(() => undefined); }
+
+  /** One run at a time: a second call while a run is in progress waits for that run and returns its result. */
   async runMail(): Promise<RunSummary> {
+    if (this.mailRun) return this.mailRun;
+    this.mailRun = this.doRunMail().finally(() => { this.mailRun = null; });
+    return this.mailRun;
+  }
+
+  private async doRunMail(): Promise<RunSummary> {
     const imap = this.store.getSettings().imap;
     if (!imap.user || !imap.pass || !imap.host) return { source: 'email', ok: false, detail: 'Boîte mail non configurée.' };
-    if (this.mailBusy) return { source: 'email', ok: true, detail: 'Vérification déjà en cours.' };
-    this.mailBusy = true;
     try {
       const r = await pollMailbox(imap, this.store, this.pipeline, this.log);
       const detail = `${r.processed} email(s) lu(s), ${r.listings} annonce(s), ${r.matched} nouvelle(s) correspondant aux réglages${r.errors.length ? ` ; ${r.errors.length} erreur(s) : ${r.errors[0]}` : ''}`;
@@ -37,8 +45,6 @@ export class Scheduler {
       this.store.sourceRun('email', false, detail);
       this.log(`email: ${detail}`);
       return { source: 'email', ok: false, detail };
-    } finally {
-      this.mailBusy = false;
     }
   }
 

@@ -5,13 +5,14 @@ import type { AppNotifier } from './notify/notify.js';
 import type { Scheduler } from './scheduler.js';
 import { geocode } from './geo/geo.js';
 import { mergeSettings } from './listings/defaults.js';
-import { specialReason } from './listings/filters.js';
+import { reasonKind, specialReason } from './listings/filters.js';
 import { extractVehicleInfo } from './listings/normalize.js';
 import { customBrands } from './pipeline.js';
 import { buildVars, lintTemplate, render, VARIABLE_HELP } from './messages/templates.js';
 import { testMailbox } from './sources/email/imap.js';
 import { fetchSite } from './sources/http.js';
 import { siteSetups } from './sources/links.js';
+import { alertAdvice, alertMismatch, siteLabel } from './sources/email/confirmations.js';
 import { FAMILIES, FAMILY_LABELS, type Family, type RawListing, type Settings, type Status } from './types.js';
 
 interface Deps { store: Store; pipeline: Pipeline; notifier: AppNotifier; scheduler: Scheduler; friendlyImapError: (e: unknown) => string }
@@ -53,6 +54,9 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
       sellerType: first?.seller_type ?? 'inconnu',
       message: pipeline.messageFor(v, settings),
       messageEdited: Boolean(v.message_override),
+      note: v.note ?? '',
+      contactedAt: v.status === 'contacte' || v.status === 'repondu' ? store.lastEventAt(v.id, 'statut_contacte') : null,
+      repliedAt: v.status === 'repondu' ? store.lastEventAt(v.id, 'statut_repondu') : null,
       listings: listings.map((l) => ({ id: l.id, site: l.site, siteLabel: l.site_label, url: l.url, title: l.title, price: l.price, firstSeenAt: l.first_seen_at, lastSeenAt: l.last_seen_at, priceHistory: full ? store.priceHistory(l.id) : [] })),
       events: full ? store.events(v.id) : [],
     };
@@ -63,23 +67,35 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     const settings = store.getSettings();
     return {
       counts: store.counts(),
+      week: store.weekStats(7),
       dealer: settings.dealer,
       zone: { city: settings.zone.city, radiusKm: settings.zone.radiusKm },
       imapConfigured: Boolean(settings.imap.user && settings.imap.pass),
+      alertsDone: Object.keys(settings.alertsDone).filter((k) => settings.alertsDone[k]),
+      alertIssues: Object.values(settings.alerts).flatMap((a) => alertMismatch(a, settings).map((m) => `${siteLabel(a.site)} : ${m}`)),
       sources: store.sourceRuns(),
       pushKey: store.secret('vapid_public'),
     };
   });
 
   // ---------- vehicles ----------
-  app.get<{ Querystring: { status?: string; days?: string; limit?: string } }>('/api/vehicles', async (req) => {
+  app.get<{ Querystring: { status?: string; days?: string; limit?: string; kind?: string } }>('/api/vehicles', async (req) => {
     const settings = store.getSettings();
     const status = req.query.status ?? 'nouveau';
     const days = req.query.days ? Number(req.query.days) : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : 150;
-    let rows: VehicleRow[];
-    if (status === 'ecartees') rows = store.listVehicles({ onlyMatched: false, sinceDays: days ?? 14, limit }).filter((v) => !v.matched);
-    else rows = store.listVehicles({ status: status === 'tous' ? 'tous' : (STATUSES.includes(status as Status) ? (status as Status) : 'nouveau'), sinceDays: days, limit });
+    if (status === 'ecartees') {
+      // Wide alerts on the sites mean many refusals: they are grouped by reason so a good deal is quick to spot.
+      const all = store.listVehicles({ onlyMatched: false, sinceDays: days ?? 14, limit: 3000 }).filter((v) => !v.matched);
+      const kindsOf = (v: VehicleRow) => new Set((JSON.parse(v.reasons || '[]') as string[]).map(reasonKind));
+      const counts: Record<string, number> = { tous: all.length, suivies: 0, loin: 0, km: 0, special: 0, pro: 0, marque: 0 };
+      const cache = new Map<number, Set<string>>();
+      for (const v of all) { const k = kindsOf(v); cache.set(v.id, k); if (!k.has('marque')) counts.suivies++; for (const x of k) counts[x] = (counts[x] ?? 0) + 1; }
+      const kind = req.query.kind || 'suivies';
+      const rows = all.filter((v) => { const k = cache.get(v.id)!; return kind === 'tous' ? true : kind === 'suivies' ? !k.has('marque') : k.has(kind); }).slice(0, limit);
+      return { vehicles: rows.map((v) => vehicleDto(v, settings)), kinds: counts };
+    }
+    const rows = store.listVehicles({ status: status === 'tous' ? 'tous' : (STATUSES.includes(status as Status) ? (status as Status) : 'nouveau'), sinceDays: days, limit });
     return { vehicles: rows.map((v) => vehicleDto(v, settings)) };
   });
 
@@ -96,7 +112,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     return { ok: true };
   });
 
-  app.post<{ Params: { id: string }; Body: { status?: string; doNotContact?: boolean; message?: string | null; keep?: boolean } }>('/api/vehicles/:id', async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { status?: string; doNotContact?: boolean; message?: string | null; keep?: boolean; note?: string | null } }>('/api/vehicles/:id', async (req, reply) => {
     const v = store.getVehicle(Number(req.params.id));
     if (!v) return reply.code(404).send({ error: 'Annonce inconnue.' });
     const now = new Date().toISOString();
@@ -112,6 +128,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
       if (b.doNotContact) { patch.status = 'ignore'; store.addEvent(v.id, 'ne_plus_contacter', null, now); }
     }
     if (b.message !== undefined) patch.message_override = b.message && b.message.trim() ? b.message : null;
+    if (b.note !== undefined) patch.note = b.note && String(b.note).trim() ? String(b.note).slice(0, 2000) : null;
     if (b.keep) { patch.matched = 1; patch.reasons = '[]'; store.addEvent(v.id, 'garde_manuellement', null, now); }
     store.updateVehicle(v.id, patch);
     return vehicleDto(store.getVehicle(v.id)!, store.getSettings(), true);
@@ -176,7 +193,10 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     const runs = store.sourceRuns();
     return {
       imap: { host: settings.imap.host, port: settings.imap.port, user: settings.imap.user, hasPassword: Boolean(settings.imap.pass), mailbox: settings.imap.mailbox, configured: Boolean(settings.imap.user && settings.imap.pass), lastRun: runs.find((r) => r.source === 'email') ?? null },
-      sites: siteSetups(settings),
+      sites: siteSetups(settings).map((s) => {
+        const alert = settings.alerts[s.key];
+        return { ...s, done: Boolean(settings.alertsDone[s.key]), alert: alert ?? null, issues: alert ? alertMismatch(alert, settings) : [], advice: alert ? alertAdvice(alert, settings) : null };
+      }),
       httpSites: settings.httpSites.map((s) => ({ ...s, lastRun: runs.find((r) => r.source === `http:${s.id}`) ?? null })),
       emails: store.recentEmails(25).map((e) => ({ ...e, parsed: e.parsed_json ? JSON.parse(e.parsed_json) : null, parsed_json: undefined })),
     };
@@ -202,6 +222,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
 
   /** Reads the whole mailbox again (after an extraction fix, say). Known listings are completed, not duplicated. */
   app.post('/api/sources/reread', async () => {
+    await scheduler.idleMail();
     store.resetMailbox();
     const mail = await scheduler.runMail();
     return { mail };
@@ -273,6 +294,10 @@ function sanitize(next: Settings, current: Settings): Settings | string {
   }
   next.httpSites = (next.httpSites ?? []).map((s) => ({ id: s.id || Math.random().toString(36).slice(2, 10), name: String(s.name ?? '').trim() || 'Site', url: String(s.url ?? '').trim(), enabled: s.enabled !== false }));
   next.imap.port = Number(next.imap.port) || 993;
+  // Confirmations recorded from the mailbox are kept even when a client sends settings loaded before they arrived.
+  const alerts = { ...current.alerts, ...(next.alerts ?? {}) };
+  next.alerts = Object.fromEntries(Object.entries(alerts).filter(([, v]) => v && typeof v === 'object' && typeof v.criteria === 'string').map(([k, v]) => [String(k).slice(0, 40), { ...v, site: String(k).slice(0, 40), criteria: String(v.criteria).slice(0, 300), manageUrl: v.manageUrl && /^https?:/i.test(v.manageUrl) ? v.manageUrl.slice(0, 500) : undefined }]));
   next.alertsDone = Object.fromEntries(Object.entries(next.alertsDone ?? {}).filter(([, v]) => v === true).map(([k]) => [String(k).slice(0, 40), true]));
+  for (const k of Object.keys(next.alerts)) next.alertsDone[k] = true;
   return next;
 }

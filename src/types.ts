@@ -70,6 +70,19 @@ export interface Settings {
   httpSites: Array<{ id: string; name: string; url: string; enabled: boolean }>;
   /** Sites on which the person has created the alert, so every device shows the same checklist. */
   alertsDone: Record<string, boolean>;
+  /** What each site confirmed by email when its alert was created (criteria, link to edit it). */
+  alerts: Record<string, AlertInfo>;
+}
+
+export interface AlertInfo {
+  site: string;
+  criteria: string;
+  confirmedAt: string;
+  manageUrl?: string;
+  radiusKm?: number;
+  maxKm?: number;
+  postalCode?: string;
+  sellerType?: 'particulier' | 'pro' | 'tous';
 }
 
 export interface FilterResult {
