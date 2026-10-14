@@ -17,8 +17,15 @@ log() { echo "==> $*"; }
 
 [ "$(id -u)" = 0 ] || { echo "Lancez ce script en root (sudo)."; exit 1; }
 
+if [ ! -f /swapfile ] && [ "$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)" -lt 3000 ]; then
+  log "Fichier d'échange de 1 Go (petite machine)"
+  fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 log "Paquets système"
 apt-get update -q
+echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections
+echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections
 apt-get install -y -q curl git ca-certificates gnupg debian-keyring debian-archive-keyring apt-transport-https iptables-persistent >/dev/null
 
 if ! command -v node >/dev/null || [ "$(node -e 'console.log(process.versions.node.split(".")[0])')" -lt 22 ]; then
@@ -34,12 +41,12 @@ if ! command -v caddy >/dev/null; then
   apt-get update -q && apt-get install -y -q caddy >/dev/null
 fi
 
-log "Pare-feu : ouverture des ports 80 et 443 (les images Oracle les ferment par défaut)"
-for p in 80 443; do
+log "Pare-feu : ouverture des ports 22, 80 et 443"
+for p in 22 80 443; do
   iptables -C INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p tcp --dport "$p" -j ACCEPT
 done
 netfilter-persistent save >/dev/null 2>&1 || true
-command -v ufw >/dev/null && ufw status | grep -q active && { ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null; } || true
+if command -v ufw >/dev/null && ufw status | grep -q active; then ufw allow 22/tcp >/dev/null; ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null; fi
 
 id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
 
