@@ -15,7 +15,8 @@ function el(tag, attrs = {}, ...children) {
     else if (k in node && k !== 'style' && typeof v !== 'string') node[k] = v;
     else node.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of children.flat()) {
+  // Children may be nested arrays (a map returning pairs): flattened all the way down.
+  for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
     node.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
@@ -78,7 +79,7 @@ const fmt = {
 };
 
 /** Like node.append, but skips null/false (the native append would write the text "null"). */
-const append = (node, ...children) => { for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c); return node; };
+const append = (node, ...children) => { for (const c of children.flat(Infinity)) if (c !== null && c !== undefined && c !== false) node.append(c); return node; };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
