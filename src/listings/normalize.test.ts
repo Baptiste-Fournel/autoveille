@@ -119,3 +119,10 @@ describe('other brands', () => {
     expect(moved).toMatchObject({ make: 'Toyota', family: 'allemandes' });
   });
 });
+
+describe('placeholder models, edge cases', () => {
+  it('reads the words after the placeholder even when the brand is not repeated first', () => {
+    expect(extractVehicleInfo({ site: 's', siteLabel: 's', externalId: '1', url: 'https://x/1', title: 'Citroen Autres - Acadiane Citroen' })).toMatchObject({ make: 'Citroën', model: 'Acadiane Citroen' });
+    expect(extractVehicleInfo({ site: 's', siteLabel: 's', externalId: '1', url: 'https://x/1', title: 'Renault Autres - Renault 1929' }).model).toBeUndefined();
+  });
+});

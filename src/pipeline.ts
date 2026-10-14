@@ -210,7 +210,8 @@ export class Pipeline {
         if (g) g.push(k); else groups.push([k]);
       }
       // The vehicle itself: name and family from the current rules, verdict refreshed if still waiting.
-      const info: VehicleInfo = { make: anchor.info.make ?? v.make ?? undefined, model: anchor.info.model ?? v.model ?? undefined, family: anchor.info.make ? anchor.info.family : v.family, year: v.year ?? undefined, km: v.km ?? undefined, price: v.price ?? undefined };
+      // The model is read afresh (an old placeholder such as « Autres » must not survive); the make keeps a fallback.
+      const info: VehicleInfo = { make: anchor.info.make ?? v.make ?? undefined, model: anchor.info.model, family: anchor.info.make ? anchor.info.family : v.family, year: v.year ?? undefined, km: v.km ?? undefined, price: v.price ?? undefined };
       const patch: Partial<VehicleRow> = {};
       if ((info.make ?? null) !== v.make || (info.model ?? null) !== v.model) { patch.make = info.make ?? null; patch.model = info.model ?? null; out.renamed++; }
       if (info.family !== v.family) patch.family = info.family;

@@ -183,7 +183,8 @@ export function extractVehicleInfo(raw: RawListing, extra: CustomBrand[] = []): 
     const after = cleanText(title.slice(inTitle.modelStart)).replace(/^\S+\s*/, '').replace(/^[-–:,|]+\s*/, '');
     if (after) {
       const again = detectBrand(after, extra);
-      model = extractModel(after, again && again.make === brand.make ? again.modelStart : 0);
+      model = (again && again.make === brand.make ? extractModel(after, again.modelStart) : undefined) ?? extractModel(after, 0);
+      if (model && fold(model) === fold(brand.make)) model = undefined; // "Renault 1929": only the brand was left
     }
   }
   const family = detectFamily(brand?.make, model, blob, extra);
