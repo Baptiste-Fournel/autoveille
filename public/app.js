@@ -348,7 +348,11 @@ async function renderAnnonceDetail(route) {
   catch (err) { return el('div', { class: 'empty' }, el('b', {}, 'Annonce introuvable'), el('a', { class: 'btn', href: '#/annonces' }, 'Retour aux annonces')); }
   const back = el('a', { class: 'btn quiet back', href: '#/annonces' }, '← Annonces');
   const { sheet } = vehicleSheet(v, { afterUpdate: async () => { location.hash = '#/annonces'; } });
-  return [back, sheet];
+  const remove = el('button', { class: 'btn quiet small danger', onclick: async () => {
+    if (!confirm('Supprimer cette annonce de l’application ? Elle reviendra si un site la renvoie.')) return;
+    try { await api('DELETE', `/api/vehicles/${v.id}`); toast('Annonce supprimée'); location.hash = '#/annonces'; } catch (err) { toast(err.message, true); }
+  } }, 'Supprimer cette annonce');
+  return [back, sheet, el('div', { class: 'row', style: 'justify-content:flex-end' }, remove)];
 }
 
 // ---------- mode rafale ----------
@@ -680,8 +684,13 @@ async function renderSources() {
 
   // Journal
   const checkBtn = el('button', { class: 'btn', onclick: async () => { checkBtn.disabled = true; checkBtn.textContent = 'Vérification…'; try { const r = await api('POST', '/api/sources/check-now'); toast(r.mail.detail, !r.mail.ok); await render(); } catch (e) { toast(e.message, true); checkBtn.disabled = false; checkBtn.textContent = 'Vérifier maintenant'; } } }, 'Vérifier maintenant');
+  const rereadBtn = el('button', { class: 'btn quiet small', onclick: async () => {
+    if (!confirm('Relire toute la boîte mail depuis le début ? Les annonces déjà connues sont complétées, pas dupliquées. Utile après une mise à jour de l’application.')) return;
+    rereadBtn.disabled = true; rereadBtn.textContent = 'Relecture…';
+    try { const r = await api('POST', '/api/sources/reread'); toast(r.mail.detail, !r.mail.ok); await render(); } catch (e) { toast(e.message, true); rereadBtn.disabled = false; rereadBtn.textContent = 'Tout relire'; }
+  } }, 'Tout relire');
   const journal = el('section', { class: 'card section' },
-    el('div', { class: 'row between' }, el('h2', {}, 'Derniers emails reçus'), checkBtn),
+    el('div', { class: 'row between' }, el('h2', {}, 'Derniers emails reçus'), el('div', { class: 'row' }, rereadBtn, checkBtn)),
     src.emails.length
       ? el('table', { class: 'emails' }, el('thead', {}, el('tr', {}, el('th', {}, 'Reçu'), el('th', {}, 'Site'), el('th', {}, 'Sujet'), el('th', { class: 'n' }, 'Annonces'))),
         el('tbody', {}, src.emails.map((e) => {

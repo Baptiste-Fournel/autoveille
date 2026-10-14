@@ -68,6 +68,30 @@ describe('pipeline', () => {
     expect(store.getVehicle(1)!.reposted).toBe(0);
   });
 
+  it('completes a listing first read without price, and refreshes the verdict', async () => {
+    const first = await pipeline.ingest(raw({ title: 'Porsche 911 Carrera S', price: undefined, km: 42000, year: 2015, description: undefined, imageUrl: undefined }));
+    expect(first.kind).toBe('new');
+    let v = store.getVehicle(first.vehicleId)!;
+    expect(v.price).toBeNull();
+    expect(v.matched).toBe(1); // modèle « 911 » suffit
+    const again = await pipeline.ingest(raw({ title: 'Porsche 911 Carrera S', price: 89900, km: 42000, year: 2015, description: 'Texte reçu', imageUrl: 'https://img/x.jpg' }));
+    expect(again.kind).toBe('seen');
+    v = store.getVehicle(first.vehicleId)!;
+    expect(v.price).toBe(89900);
+    expect(store.listingsOfVehicle(v.id)[0]).toMatchObject({ price: 89900, image_url: 'https://img/x.jpg', description: 'Texte reçu' });
+    expect(store.events(v.id).some((e) => e.type.startsWith('prix_'))).toBe(false);
+  });
+
+  it('deletes a vehicle with everything attached, and can forget the read emails', async () => {
+    const out = await pipeline.ingest(raw());
+    store.markEmail({ message_id: '<a>', uid: 7, subject: 's', sender: 'x@y', received_at: null, site: 'leboncoin', parsed_count: 1, parsed_json: null, error: null });
+    store.deleteVehicle(out.vehicleId);
+    expect(store.getVehicle(out.vehicleId)).toBeUndefined();
+    expect(store.listingsOfVehicle(out.vehicleId)).toHaveLength(0);
+    store.resetMailbox();
+    expect(store.emailProcessed('<a>')).toBe(false);
+  });
+
   it('re-evaluates recent vehicles when settings change', async () => {
     await pipeline.ingest(raw());
     await pipeline.ingest(raw({ externalId: '2', title: 'Audi A3 Sportback 2019 35 000 km 22 000 €' }));

@@ -89,6 +89,13 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     return vehicleDto(v, store.getSettings(), true);
   });
 
+  app.delete<{ Params: { id: string } }>('/api/vehicles/:id', async (req, reply) => {
+    const v = store.getVehicle(Number(req.params.id));
+    if (!v) return reply.code(404).send({ error: 'Annonce inconnue.' });
+    store.deleteVehicle(v.id);
+    return { ok: true };
+  });
+
   app.post<{ Params: { id: string }; Body: { status?: string; doNotContact?: boolean; message?: string | null; keep?: boolean } }>('/api/vehicles/:id', async (req, reply) => {
     const v = store.getVehicle(Number(req.params.id));
     if (!v) return reply.code(404).send({ error: 'Annonce inconnue.' });
@@ -191,6 +198,13 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     const mail = await scheduler.runMail();
     const http = await scheduler.runHttp();
     return { mail, http };
+  });
+
+  /** Reads the whole mailbox again (after an extraction fix, say). Known listings are completed, not duplicated. */
+  app.post('/api/sources/reread', async () => {
+    store.resetMailbox();
+    const mail = await scheduler.runMail();
+    return { mail };
   });
 
   app.post<{ Body: { url?: string } }>('/api/sources/http/test', async (req) => {

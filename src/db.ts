@@ -190,6 +190,24 @@ export class Store {
     this.db.prepare(`UPDATE vehicles SET ${sets} WHERE id = @id`).run({ ...patch, id });
   }
 
+  updateListing(id: number, patch: Partial<ListingRow>): void {
+    const keys = Object.keys(patch) as Array<keyof ListingRow>;
+    if (!keys.length) return;
+    const sets = keys.map((k) => `${k} = @${k}`).join(', ');
+    this.db.prepare(`UPDATE listings SET ${sets} WHERE id = @id`).run({ ...patch, id });
+  }
+
+  /** Removes one vehicle with its listings, prices and events (a wrongly read email, say). */
+  deleteVehicle(id: number): void {
+    this.db.prepare('DELETE FROM vehicles WHERE id = ?').run(id);
+  }
+
+  /** Forget which emails were read, so the next check reads the mailbox again from the start. */
+  resetMailbox(): void {
+    this.db.prepare('DELETE FROM emails_processed').run();
+    this.db.prepare('UPDATE mail_state SET last_uid = 0').run();
+  }
+
   listingsOfVehicle(vehicleId: number): ListingRow[] {
     return this.db.prepare('SELECT * FROM listings WHERE vehicle_id = ? ORDER BY first_seen_at').all(vehicleId) as ListingRow[];
   }

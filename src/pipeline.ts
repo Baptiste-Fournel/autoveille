@@ -79,6 +79,26 @@ export class Pipeline {
         return { kind: 'price', vehicleId, from: existing.price, to: raw.price };
       }
       this.store.touchListing(existing.id, now, raw.price ?? null);
+      // Data the first reading missed (price, photo, text) completes the record; the verdict is refreshed
+      // for vehicles still waiting, since a price can change what the rules say.
+      const vehicle = this.store.getVehicle(vehicleId);
+      if (vehicle) {
+        const patch: Partial<VehicleRow> = {};
+        if (vehicle.price === null && raw.price !== undefined) patch.price = raw.price;
+        if (vehicle.km === null && raw.km !== undefined) patch.km = raw.km;
+        if (vehicle.year === null && raw.year !== undefined) patch.year = raw.year;
+        if (!existing.image_url && raw.imageUrl) this.store.updateListing(existing.id, { image_url: raw.imageUrl });
+        if (!existing.description && raw.description) this.store.updateListing(existing.id, { description: raw.description });
+        if (Object.keys(patch).length) {
+          if (vehicle.status === 'nouveau' && !vehicle.do_not_contact) {
+            const merged = { ...info, price: patch.price ?? vehicle.price ?? undefined, km: patch.km ?? vehicle.km ?? undefined, year: patch.year ?? vehicle.year ?? undefined };
+            const verdict = evaluate(raw, merged, settings, { distanceKm: vehicle.distance_km });
+            patch.matched = verdict.pass ? 1 : 0;
+            patch.reasons = JSON.stringify(verdict.reasons);
+          }
+          this.store.updateVehicle(vehicleId, patch);
+        }
+      }
       return { kind: 'seen', vehicleId };
     }
 
