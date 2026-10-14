@@ -204,7 +204,9 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
 
   app.post<{ Body: { host?: string; port?: number; user?: string; pass?: string; mailbox?: string } }>('/api/sources/imap/test', async (req) => {
     const s = store.getSettings().imap;
-    const cfg = { host: req.body?.host || s.host, port: Number(req.body?.port || s.port), user: req.body?.user || s.user, pass: req.body?.pass || s.pass, mailbox: req.body?.mailbox || s.mailbox };
+    // The form sends the saved password back masked: the test then uses the real one.
+    const typed = req.body?.pass && req.body.pass !== '••••••••' ? req.body.pass : '';
+    const cfg = { host: req.body?.host || s.host, port: Number(req.body?.port || s.port), user: req.body?.user || s.user, pass: typed || s.pass, mailbox: req.body?.mailbox || s.mailbox };
     if (!cfg.user || !cfg.pass) return { ok: false, detail: 'Adresse ou mot de passe d’application manquant.' };
     try {
       const r = await testMailbox(cfg);
