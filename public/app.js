@@ -33,9 +33,36 @@ const ICONS = {
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>',
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M13.5 8.5l3 3"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3L7 7M17 17l1.7 1.7M5.3 18.7L7 17M17 7l1.7-1.7"/></svg>',
   logo: '<svg viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="8" fill="#1F5E3C"/><path d="M8 19l2.2-5.2A2 2 0 0 1 12 12.5h8a2 2 0 0 1 1.8 1.2L24 19" stroke="#F2C94C" stroke-width="2" stroke-linecap="round"/><path d="M6.5 19h19v4h-2.2a1.8 1.8 0 0 1-3.6 0h-7.4a1.8 1.8 0 0 1-3.6 0H6.5z" fill="#F2C94C"/></svg>',
 };
 const svg = (name, cls) => { const s = el('span', { class: cls || '', html: ICONS[name] }); return s.firstChild; };
+
+// ---------- thème ----------
+// « auto » suit l'appareil ; « light » / « dark » sont des choix explicites, propres à cet appareil.
+const theme = {
+  current: () => prefs.get('theme') || 'auto',
+  isDark: () => { const t = theme.current(); return t === 'dark' || (t === 'auto' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches); },
+  apply(t) {
+    if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
+    prefs.set('theme', t);
+    const meta = document.querySelector('meta[name=theme-color]'); if (meta) meta.content = theme.isDark() ? '#15171A' : '#F5F4F0';
+    for (const b of document.querySelectorAll('.theme-btn')) theme.decorate(b);
+    document.dispatchEvent(new CustomEvent('av:theme'));
+  },
+  /** One tap flips light ↔ dark from whatever is showing now. */
+  toggle() { theme.apply(theme.isDark() ? 'light' : 'dark'); },
+  decorate(btn) {
+    const dark = theme.isDark();
+    btn.replaceChildren(svg(dark ? 'sun' : 'moon'));
+    btn.title = dark ? 'Passer en mode clair' : 'Passer en mode sombre';
+    btn.setAttribute('aria-label', btn.title);
+    btn.setAttribute('aria-pressed', String(dark));
+  },
+  button() { const b = el('button', { class: 'theme-btn', type: 'button', onclick: theme.toggle }); theme.decorate(b); return b; },
+};
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (theme.current() === 'auto') theme.apply('auto'); });
 
 /** Short confirmation at the bottom of the screen. With `undo`, an « Annuler » button stays six seconds. */
 function toast(message, error = false, undo) {
@@ -154,7 +181,7 @@ function navLinks() {
 function renderShell(content) {
   const { top, bottom } = navLinks();
   return el('div', { class: 'shell' },
-    el('header', { class: 'topbar' }, el('div', { class: 'brand' }, svg('logo'), 'AutoVeille'), top),
+    el('header', { class: 'topbar' }, el('div', { class: 'brand' }, svg('logo'), 'AutoVeille'), el('div', { class: 'topbar-right' }, top, theme.button())),
     el('main', { class: 'view' }, content),
     bottom,
   );
@@ -741,19 +768,14 @@ async function renderReglages() {
       return box;
     }));
 
-  // Affichage : clair, sombre, ou comme le téléphone. Un choix par appareil.
-  const themeNow = () => prefs.get('theme') || 'auto';
-  const applyTheme = (t) => {
-    if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
-    prefs.set('theme', t);
-    const dark = t === 'dark' || (t === 'auto' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
-    const meta = document.querySelector('meta[name=theme-color]'); if (meta) meta.content = dark ? '#15171A' : '#F5F4F0';
-  };
+  // Affichage : l'icône soleil/lune en haut de l'écran bascule clair ↔ sombre ; ici, on peut aussi suivre l'appareil.
   const seg = el('div', { class: 'segmented', role: 'group', 'aria-label': 'Thème' });
-  const drawSeg = () => seg.replaceChildren(...[['auto', 'Comme l’appareil'], ['light', 'Clair'], ['dark', 'Sombre']].map(([k, label]) => el('button', { type: 'button', 'aria-pressed': String(themeNow() === k), onclick: () => { applyTheme(k); drawSeg(); } }, label)));
+  const drawSeg = () => seg.replaceChildren(...[['auto', 'Comme l’appareil'], ['light', 'Clair'], ['dark', 'Sombre']].map(([k, label]) => el('button', { type: 'button', 'aria-pressed': String(theme.current() === k), onclick: () => theme.apply(k) }, label)));
   drawSeg();
+  const onTheme = () => { if (seg.isConnected) drawSeg(); else document.removeEventListener('av:theme', onTheme); };
+  document.addEventListener('av:theme', onTheme);
   const display = el('section', { class: 'card section' }, el('h2', {}, 'Affichage'),
-    el('div', { class: 'field' }, el('label', {}, 'Thème'), seg, el('span', { class: 'help' }, 'Le mode sombre repose les yeux le soir. Réglage propre à cet appareil.')));
+    el('div', { class: 'field' }, el('label', {}, 'Thème'), seg, el('span', { class: 'help' }, 'L’icône en haut de l’écran bascule entre clair et sombre. « Comme l’appareil » suit le réglage du téléphone. Choix propre à cet appareil.')));
 
   // Notifications
   const notif = el('section', { class: 'card section' }, el('h2', {}, 'Notifications'),

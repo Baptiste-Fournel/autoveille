@@ -1,5 +1,5 @@
 /* Service worker : notifications push et mise en cache légère de la coque de l'application. */
-const CACHE = 'autoveille-v3';
+const CACHE = 'autoveille-v4';
 const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (event) => {

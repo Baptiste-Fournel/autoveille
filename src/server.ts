@@ -65,7 +65,7 @@ export async function buildServer(opts: { dataDir?: string; store?: Store } = {}
     if (['/api/me', '/api/login', '/api/setup'].includes(path)) return;
     // The one-off import may come from another site's page (a search page read in the browser): it carries
     // the import token in its body instead of the session cookie, and is checked by its handler.
-    if (path === '/api/import' && req.method === 'POST' && (req.headers['content-type'] ?? '').startsWith('text/plain')) return;
+    if ((path === '/api/import' || path === '/api/import/dates') && req.method === 'POST' && (req.headers['content-type'] ?? '').startsWith('text/plain')) return;
     if (!sessionOf(req)) return reply.code(401).send({ error: 'non connecté' });
   });
 

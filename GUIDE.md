@@ -33,7 +33,7 @@ Dans « Contactées », chaque carte indique depuis combien de jours le vendeur 
 
 La date affichée sur une annonce est celle de sa publication sur le site (« publiée hier à 10:02 ») ; les annonces sont classées de la plus récente à la plus ancienne. Un champ de recherche filtre par modèle, marque ou ville, et le bouton **Filtres** trie (plus récentes, prix, distance, kilométrage) et restreint par famille, par site, par prix et par distance, à la barre. Les choix restent mémorisés sur l'appareil.
 
-Dans Réglages > Affichage, l'application peut suivre le thème de l'appareil, ou rester claire ou sombre.
+L'icône soleil / lune en haut de l'écran bascule entre mode clair et mode sombre. Dans Réglages > Affichage, « Comme l'appareil » fait suivre le réglage du téléphone.
 
 Plusieurs annonces à traiter : **Traiter en rafale**. Elles défilent une par une : « Ouvrir l'annonce et copier le message », coller, envoyer, revenir ; l'application demande « Message envoyé ? » et passe à la suivante. Dix annonces se traitent en une minute, et chaque envoi reste le vôtre.
 
@@ -58,7 +58,7 @@ Un message par famille, avec plusieurs variantes tirées au hasard pour ne pas e
 - Aucune annonce n'arrive : dans **Sites**, vérifier que la boîte mail est « Fonctionne » et que le journal « Derniers emails reçus » montre des emails. S'il est vide, les alertes ne sont pas créées sur les sites ou n'arrivent pas sur la bonne adresse.
 - Un email est reçu mais « aucune annonce reconnue » : le site a changé le format de ses emails. Le transmettre à la personne qui maintient l'outil (télécharger l'email en .eml depuis Gmail).
 - Une voiture a été écartée à tort : onglet « Écartées par les filtres », la raison est affichée, « Garder quand même » la remet dans la file.
-- Après une mise à jour de l'application : dans **Sites**, « Tout relire » relit toute la boîte mail ; les annonces connues sont complétées, pas dupliquées.
+- Après une mise à jour de l'application : rien n'est perdu (annonces, statuts, notes, réglages vivent sur le serveur, et une copie de la base est faite avant chaque mise à jour). Dans **Sites**, « Tout relire » relit toute la boîte mail ; les annonces connues sont complétées, pas dupliquées.
 - Les photos de certains sites (La Centrale) ne s'affichent que sur le site lui-même : l'application montre alors une icône, et la fiche propose « Photos sur le site ».
 
 ## Ce que l'application ne fait pas

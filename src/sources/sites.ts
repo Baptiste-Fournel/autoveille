@@ -30,7 +30,9 @@ export const SITES: SiteDef[] = [
   },
   {
     key: 'autoscout24', label: 'AutoScout24', hosts: ['autoscout24.fr', 'autoscout24.com'], senders: ['autoscout24.fr', 'autoscout24.com'],
-    listing: [/^\/annonces\/.*-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i, /^\/offres\/.*-([0-9a-f-]{20,})/i],
+    // The id is the full uuid at the end of the path; the slug before it carries dashes too, so the uuid is
+    // matched in full rather than "whatever follows the last dash".
+    listing: [/^\/(?:annonces|offres)\/(?:.*-)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i, /^\/offres\/([0-9a-f-]{20,})/i],
     alertHelp: 'Après une recherche, utilisez « Sauver la recherche », puis dans Mon AutoScout24 > Recherches sauvegardées, activez « Alertez-moi par e-mail » (il est désactivé par défaut).',
     manageUrl: 'https://www.autoscout24.fr/account/searches',
   },
@@ -106,7 +108,7 @@ export function listingRef(urlStr: string, hint?: SiteDef): ListingRef | undefin
 function canonical(u: URL): string {
   // Drop tracking parameters but keep the path.
   const keep = new URLSearchParams();
-  for (const [k, v] of u.searchParams) if (!/^(utm_|mc_|mkt_|ref|refid|src|source|campaign|fbclid|gclid|_ga|sid|eid|cid|tracking|track)/i.test(k)) keep.set(k, v);
+  for (const [k, v] of u.searchParams) if (!/^(utm_|mc_|mkt_|ref|refid|src|source|campaign|fbclid|gclid|_ga|sid|eid|cid|tracking|track|cldtidx|ap_tier|position|pos$)/i.test(k)) keep.set(k, v);
   const q = keep.toString();
   return `${u.origin}${u.pathname}${q ? '?' + q : ''}`;
 }

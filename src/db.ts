@@ -204,6 +204,18 @@ export class Store {
     this.db.prepare(`UPDATE listings SET ${sets} WHERE id = @id`).run({ ...patch, id });
   }
 
+  /**
+   * Records the date a known listing went online on its site. The site is the authority for its own
+   * listing; the vehicle keeps the earliest date among its listings. Returns false for an unknown listing.
+   */
+  setPublishedAt(site: string, externalId: string, publishedAt: string): boolean {
+    const listing = this.findListing(site, externalId);
+    if (!listing) return false;
+    this.db.prepare('UPDATE listings SET published_at = ? WHERE id = ?').run(publishedAt, listing.id);
+    this.db.prepare('UPDATE vehicles SET published_at = ? WHERE id = ? AND (published_at IS NULL OR published_at > ?)').run(publishedAt, listing.vehicle_id, publishedAt);
+    return true;
+  }
+
   /** Removes one vehicle with its listings, prices and events (a wrongly read email, say). */
   deleteVehicle(id: number): void {
     this.db.prepare('DELETE FROM vehicles WHERE id = ?').run(id);

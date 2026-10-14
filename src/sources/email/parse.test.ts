@@ -73,6 +73,11 @@ describe('alert email parsing', () => {
 
   it('recognises listing urls of known sites and unknown ones generically', () => {
     expect(listingRef('https://www.autoscout24.fr/annonces/porsche-911-carrera-essence-noir-12345678-1234-1234-1234-123456789abc')?.id).toBe('12345678-1234-1234-1234-123456789abc');
+    // The slug before the uuid is full of dashes: the id must be the whole uuid, and tracking parameters go.
+    const offre = listingRef('https://www.autoscout24.fr/offres/bmw-z4-sdrive20i-197-ch-bvm6-essence-gris-cat_ma13mo18308-8723275b-cdc4-4a58-811d-ae9cef84c6f3?cldtidx=0&ap_tier=t30');
+    expect(offre?.id).toBe('8723275b-cdc4-4a58-811d-ae9cef84c6f3');
+    expect(offre?.url).toBe('https://www.autoscout24.fr/offres/bmw-z4-sdrive20i-197-ch-bvm6-essence-gris-cat_ma13mo18308-8723275b-cdc4-4a58-811d-ae9cef84c6f3');
+    expect(listingRef('https://www.autoscout24.fr/offres/8723275b-cdc4-4a58-811d-ae9cef84c6f3')?.id).toBe('8723275b-cdc4-4a58-811d-ae9cef84c6f3');
     expect(listingRef('https://www.paruvendu.fr/a/voiture-occasion/porsche/911/1234567890A1B')?.id).toBe('1234567890A1B');
     expect(listingRef('https://www.leboncoin.fr/recherches/123')).toBeUndefined();
     const generic = listingRef('https://www.petit-site-auto.fr/annonce/porsche-911-carrera-4s-2015/987654');

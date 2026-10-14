@@ -98,8 +98,20 @@ p { margin: 0; }
 .nav a { text-decoration: none; color: var(--ink-2); padding: 8px 14px; border-radius: 999px; font-weight: 500; font-size: 15px; white-space: nowrap; }
 .nav a[aria-current="page"] { background: var(--ink); color: var(--paper); }
 .nav .badge { margin-left: 6px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+/* Sun / moon: one tap flips light and dark. Same height as the nav pill so the bar stays aligned. */
+.theme-btn {
+  width: 44px; height: 44px; border-radius: 999px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); cursor: pointer;
+  transition: background .15s, color .15s, transform .15s;
+}
+.theme-btn svg { width: 22px; height: 22px; }
+.theme-btn:hover { color: var(--ink); }
+.theme-btn:active { transform: scale(.94); }
 @media (max-width: 640px) {
   .topbar .nav { display: none; }
+  .theme-btn { width: 40px; height: 40px; }
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
     display: grid; grid-template-columns: repeat(4, 1fr);

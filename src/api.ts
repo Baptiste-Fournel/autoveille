@@ -278,6 +278,28 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     return out;
   });
 
+  /**
+   * Completes known listings with the date they went online, read on the ad page itself (the result lists of
+   * some sites carry no date). Nothing else changes: no new vehicle, no new verdict, no notification.
+   */
+  app.post<{ Body: { items?: Array<{ site?: string; externalId?: string; publishedAt?: string }>; token?: string } }>('/api/import/dates', async (req, reply) => {
+    if ((req.headers['content-type'] ?? '').startsWith('text/plain')) {
+      const expected = store.secret('import_token');
+      if (!expected || !req.body?.token || req.body.token.length !== expected.length || !timingSafeEqual(Buffer.from(req.body.token), Buffer.from(expected))) return reply.code(401).send({ error: 'jeton invalide' });
+    }
+    const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 1000) : [];
+    if (!items.length) return reply.code(400).send({ error: 'Aucune date à enregistrer.' });
+    const out = { received: items.length, updated: 0, unknown: 0, skipped: 0 };
+    for (const it of items) {
+      const site = String(it.site ?? '').slice(0, 40);
+      const externalId = String(it.externalId ?? '').slice(0, 300);
+      const t = Date.parse(String(it.publishedAt ?? ''));
+      if (!site || !externalId || Number.isNaN(t) || t > Date.now() + 86_400_000) { out.skipped++; continue; }
+      if (store.setPublishedAt(site, externalId, new Date(t).toISOString())) out.updated++; else out.unknown++;
+    }
+    return out;
+  });
+
   app.post<{ Body: { url?: string } }>('/api/sources/http/test', async (req) => {
     const url = (req.body?.url ?? '').trim();
     if (!url) return { ok: false, detail: 'Indiquez l’adresse de la page de résultats.' };
