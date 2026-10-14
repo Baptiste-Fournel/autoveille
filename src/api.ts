@@ -273,5 +273,6 @@ function sanitize(next: Settings, current: Settings): Settings | string {
   }
   next.httpSites = (next.httpSites ?? []).map((s) => ({ id: s.id || Math.random().toString(36).slice(2, 10), name: String(s.name ?? '').trim() || 'Site', url: String(s.url ?? '').trim(), enabled: s.enabled !== false }));
   next.imap.port = Number(next.imap.port) || 993;
+  next.alertsDone = Object.fromEntries(Object.entries(next.alertsDone ?? {}).filter(([, v]) => v === true).map(([k]) => [String(k).slice(0, 40), true]));
   return next;
 }

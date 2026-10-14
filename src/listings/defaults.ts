@@ -165,6 +165,7 @@ export function defaultSettings(): Settings {
     maxKm: 100_000,
     privateOnly: true,
     specialOnly: true,
+    alertsDone: {},
     families: {
       allemandes: familyRules('allemandes'),
       italiennes: familyRules('italiennes'),
@@ -203,6 +204,7 @@ export function mergeSettings(stored: Partial<Settings> | undefined): Settings {
     maxKm: stored.maxKm ?? d.maxKm,
     privateOnly: stored.privateOnly ?? d.privateOnly,
     specialOnly: stored.specialOnly ?? d.specialOnly,
+    alertsDone: { ...(stored.alertsDone ?? {}) },
     families: { ...d.families },
     templates: { ...d.templates },
     notifications: { ...d.notifications, ...(stored.notifications ?? {}) },

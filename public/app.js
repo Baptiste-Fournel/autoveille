@@ -621,7 +621,6 @@ async function renderSources() {
   const d = state.draft || (state.draft = clone(state.settings));
   const src = await api('GET', '/api/sources');
   state.sources = src;
-  const done = JSON.parse(localStorage.getItem('alertsDone') || '{}');
 
   const field = (label, input, help) => el('div', { class: 'field' }, el('label', {}, label), input, help ? el('span', { class: 'help' }, help) : null);
   const text = (obj, key, attrs = {}) => el('input', { class: 'input', value: obj[key] ?? '', ...attrs, oninput: (e) => { obj[key] = attrs.type === 'number' ? Number(e.target.value) : e.target.value; } });
@@ -651,7 +650,10 @@ async function renderSources() {
   // Sites
   const MAIN = ['leboncoin', 'lacentrale', 'autoscout24', 'paruvendu'];
   const siteRow = (s) => el('div', { class: 'site' },
-    el('div', { class: 'shead' }, el('h3', {}, s.label), el('label', { class: 'row small muted' }, el('input', { type: 'checkbox', checked: Boolean(done[s.key]), onchange: (e) => { done[s.key] = e.target.checked; localStorage.setItem('alertsDone', JSON.stringify(done)); } }), 'Alerte créée')),
+    el('div', { class: 'shead' }, el('h3', {}, s.label), el('label', { class: 'row small muted' }, el('input', { type: 'checkbox', checked: Boolean(d.alertsDone?.[s.key]), onchange: async (e) => {
+      d.alertsDone = { ...(d.alertsDone || {}), [s.key]: e.target.checked };
+      try { const r = await api('PUT', '/api/settings', state.draft); state.settings = r.settings; state.draft = clone(r.settings); toast(e.target.checked ? `Alerte ${s.label} notée comme créée` : 'Noté'); } catch (err) { toast(err.message, true); }
+    } }), 'Alerte créée')),
     el('p', { class: 'small' }, el('a', { href: s.searchUrl, target: '_blank', rel: 'noopener' }, s.prefilled ? 'Ouvrir la recherche pré-remplie' : 'Ouvrir le site'), ' puis ', s.help.charAt(0).toLowerCase() + s.help.slice(1)));
   const sites = el('section', { class: 'card section' }, el('h2', {}, 'Créer les alertes sur les sites'),
     el('p', { class: 'muted small' }, 'À faire une seule fois. Sur chaque site : une recherche large (toutes marques, particuliers, votre ville et votre rayon, kilométrage maximum), puis « créer une alerte » vers l’adresse Gmail dédiée, en réception immédiate quand le site le propose. Le tri fin se fait ici, dans Réglages.'),

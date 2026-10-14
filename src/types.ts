@@ -68,6 +68,8 @@ export interface Settings {
   /** The dedicated mailbox that receives the sites' alert emails. */
   imap: { host: string; port: number; user: string; pass: string; mailbox: string };
   httpSites: Array<{ id: string; name: string; url: string; enabled: boolean }>;
+  /** Sites on which the person has created the alert, so every device shows the same checklist. */
+  alertsDone: Record<string, boolean>;
 }
 
 export interface FilterResult {
