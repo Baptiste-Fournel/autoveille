@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Met à jour AutoVeille depuis le dépôt git et redémarre le service.
+# À lancer en root : sudo bash /opt/autoveille/deploy/update.sh
 set -euo pipefail
 cd /opt/autoveille
+# Le dépôt appartient à l'utilisateur autoveille ; git refuse sinon de le lire en root.
+git config --global --add safe.directory /opt/autoveille >/dev/null 2>&1 || true
 git pull -q
 npm ci --ignore-scripts --no-audit --no-fund >/dev/null
 npm run build >/dev/null
