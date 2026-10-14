@@ -7,6 +7,7 @@
 #   SETUP_CODE    code de première connexion (défaut : généré, affiché à la fin et dans /root/autoveille-setup.txt)
 #   DOMAIN        nom de domaine pour le HTTPS (défaut : <ip-publique>.sslip.io, gratuit)
 #   ACME_EMAIL    email pour le certificat Let's Encrypt (facultatif)
+#   SSH_KEY       clé publique SSH à autoriser pour l'administration (facultatif)
 set -euo pipefail
 
 APP_USER=autoveille
@@ -75,6 +76,16 @@ ENV
 fi
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 chmod 600 "$APP_DIR/.env"
+
+if [ -n "${SSH_KEY:-}" ]; then
+  log "Clé SSH d'administration"
+  for home in /root "$(getent passwd ubuntu | cut -d: -f6)"; do
+    [ -n "$home" ] && [ -d "$home" ] || continue
+    mkdir -p "$home/.ssh" && chmod 700 "$home/.ssh"
+    grep -qF "$SSH_KEY" "$home/.ssh/authorized_keys" 2>/dev/null || echo "$SSH_KEY" >> "$home/.ssh/authorized_keys"
+    chmod 600 "$home/.ssh/authorized_keys"; chown -R "$(stat -c %U "$home")" "$home/.ssh"
+  done
+fi
 
 log "Service systemd"
 cat > /etc/systemd/system/autoveille.service <<UNIT
