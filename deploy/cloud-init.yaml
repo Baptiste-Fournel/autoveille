@@ -3,6 +3,9 @@
 # Remplacez REPO_URL par l'adresse du dépôt git public contenant AutoVeille.
 # Le code de première connexion s'affiche à la fin dans /root/autoveille-setup.txt (et dans le journal cloud-init).
 package_update: true
+packages:
+  - git
+  - curl
 runcmd:
   - export REPO_URL="https://github.com/VOTRE-COMPTE/autoveille.git"
   - export SETUP_CODE="CODE-A-REMPLACER"

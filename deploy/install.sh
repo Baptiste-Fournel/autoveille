@@ -36,7 +36,7 @@ fi
 
 log "Pare-feu : ouverture des ports 80 et 443 (les images Oracle les ferment par défaut)"
 for p in 80 443; do
-  iptables -C INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null || iptables -I INPUT 5 -p tcp --dport "$p" -j ACCEPT
+  iptables -C INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p tcp --dport "$p" -j ACCEPT
 done
 netfilter-persistent save >/dev/null 2>&1 || true
 command -v ufw >/dev/null && ufw status | grep -q active && { ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null; } || true
