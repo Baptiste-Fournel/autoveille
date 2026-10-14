@@ -62,7 +62,8 @@ export class Pipeline {
     return { distance: haversineKm({ lat: settings.zone.lat, lon: settings.zone.lon }, g), lat: g.lat, lon: g.lon };
   }
 
-  async ingest(raw: RawListing, settings = this.store.getSettings()): Promise<IngestOutcome> {
+  async ingest(raw: RawListing, settings = this.store.getSettings(), opts: { notify?: boolean } = {}): Promise<IngestOutcome> {
+    const notify = opts.notify !== false;
     const now = new Date().toISOString();
     const info = extractVehicleInfo(raw, customBrands(settings));
     // Fields parsed from the title complete what the source gave us.
@@ -80,7 +81,7 @@ export class Pipeline {
         this.store.addEvent(vehicleId, dropped ? 'prix_baisse' : 'prix_hausse', `${existing.price} → ${raw.price}`, now);
         // A lower price on a vehicle the person is still interested in (waiting, or contacted) is worth a notification.
         const v = this.store.getVehicle(vehicleId);
-        if (dropped && v && v.matched && !v.do_not_contact && (v.status === 'nouveau' || v.status === 'contacte') && this.notifier?.priceDrop) {
+        if (notify && dropped && v && v.matched && !v.do_not_contact && (v.status === 'nouveau' || v.status === 'contacte') && this.notifier?.priceDrop) {
           try { await this.notifier.priceDrop(v, raw, existing.price, raw.price); }
           catch (err) { this.store.addEvent(vehicleId, 'notification_echec', String(err), new Date().toISOString()); }
         }
@@ -136,7 +137,7 @@ export class Pipeline {
     this.store.insertListing(rawToListingRow(raw, vehicleId, now));
     this.store.addEvent(vehicleId, 'nouveau', raw.siteLabel, now);
 
-    if (verdict.pass && this.notifier) {
+    if (verdict.pass && this.notifier && notify) {
       const row = this.store.getVehicle(vehicleId)!;
       const message = this.messageFor(row, settings);
       try {

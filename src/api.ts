@@ -233,6 +233,37 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     return { mail };
   });
 
+  /**
+   * One-off import of listings read elsewhere (a search page opened by hand, say): they go through the same
+   * filters as the alert emails, without notifications. Known listings are completed, not duplicated.
+   */
+  app.post<{ Body: { listings?: Array<Partial<RawListing>>; notify?: boolean } }>('/api/import', async (req, reply) => {
+    const items = Array.isArray(req.body?.listings) ? req.body.listings.slice(0, 500) : [];
+    if (!items.length) return reply.code(400).send({ error: 'Aucune annonce à importer.' });
+    const settings = store.getSettings();
+    const out = { received: items.length, new: 0, matched: 0, seen: 0, skipped: 0 };
+    for (const it of items) {
+      const site = String(it.site ?? '').slice(0, 40);
+      const url = String(it.url ?? '').slice(0, 1000);
+      const title = String(it.title ?? '').trim().slice(0, 300);
+      if (!site || !/^https?:/i.test(url) || !title) { out.skipped++; continue; }
+      const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : undefined; };
+      const raw: RawListing = {
+        site, siteLabel: String(it.siteLabel ?? siteLabel(site)).slice(0, 60), externalId: String(it.externalId ?? url).slice(0, 300), url, title,
+        price: num(it.price), km: num(it.km), year: num(it.year),
+        city: it.city ? String(it.city).slice(0, 120) : undefined, postalCode: it.postalCode ? String(it.postalCode).slice(0, 10) : undefined,
+        imageUrl: it.imageUrl && /^https?:/i.test(String(it.imageUrl)) ? String(it.imageUrl).slice(0, 1000) : undefined,
+        description: it.description ? String(it.description).slice(0, 4000) : undefined,
+        sellerType: it.sellerType === 'pro' || it.sellerType === 'particulier' ? it.sellerType : undefined,
+      };
+      try {
+        const r = await pipeline.ingest(raw, settings, { notify: req.body?.notify === true });
+        if (r.kind === 'new') { out.new++; if (r.matched) out.matched++; } else out.seen++;
+      } catch { out.skipped++; }
+    }
+    return out;
+  });
+
   app.post<{ Body: { url?: string } }>('/api/sources/http/test', async (req) => {
     const url = (req.body?.url ?? '').trim();
     if (!url) return { ok: false, detail: 'Indiquez l’adresse de la page de résultats.' };
