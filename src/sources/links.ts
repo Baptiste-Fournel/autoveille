@@ -25,9 +25,13 @@ export function siteSetups(settings: Settings): SiteSetup[] {
       url: `https://www.leboncoin.fr/recherche?category=2&locations=${encodeURIComponent(city)}__${lat.toFixed(4)}_${lon.toFixed(4)}_5000_${radius * 1000}&owner_type=private&mileage=min-${km}`,
       prefilled: true,
     },
-    lacentrale: { url: `https://www.lacentrale.fr/listing?customerFamilyCodes=PARTICULIER&mileageMax=${km}&dist=${radius}&location=${encodeURIComponent(city)}`, prefilled: true },
+    // Formats vérifiés le 14/10/2026 sur les sites eux-mêmes.
+    lacentrale: { url: `https://www.lacentrale.fr/listing?customerFamilyCodes=PART&dptCp=${postal}&mileageMax=${km}`, prefilled: true },
     autoscout24: { url: `https://www.autoscout24.fr/lst?custtype=P&kmto=${km}&zip=${postal}&zipr=${radius}&cy=F&atype=C`, prefilled: true },
-    paruvendu: { url: 'https://www.paruvendu.fr/a/voiture-occasion/', prefilled: false },
+    // ParuVendu identifie la ville par son code INSEE ; seul celui de Bordeaux est connu ici.
+    paruvendu: /^bordeaux$/i.test(city.trim())
+      ? { url: `https://www.paruvendu.fr/auto-moto/listefo/default/default?reaf=1&codeINSEE=33063%2C&ray=${radius}&r=VVO00000&km1=${km}&codPro=off`, prefilled: true }
+      : { url: 'https://www.paruvendu.fr/voiture-occasion/', prefilled: false },
     largus: { url: 'https://occasion.largus.fr/voiture-occasion/', prefilled: false },
     'ouestfrance-auto': { url: 'https://www.ouestfrance-auto.com/voiture-occasion/', prefilled: false },
     'annonces-automobile': { url: 'https://www.annonces-automobile.com/', prefilled: false },
