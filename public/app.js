@@ -238,30 +238,25 @@ async function renderAnnonces() {
 }
 
 // ---------- tri et filtres de la liste ----------
-const FILTER_DEFAULTS = { sort: 'recent', families: [], sites: [], price: 'all', dist: 'all' };
+// priceMin/priceMax in euros (null = no bound), distMax in km (null = whole zone).
+const FILTER_DEFAULTS = { sort: 'recent', families: [], sites: [], priceMin: null, priceMax: null, distMax: null };
 const SORTS = [['recent', 'Plus récentes'], ['priceDesc', 'Prix décroissant'], ['priceAsc', 'Prix croissant'], ['near', 'Les plus proches'], ['kmAsc', 'Moins de km']];
-const PRICES = [['all', 'Tous'], ['lt30', '< 30 000 €'], ['30-60', '30 à 60 000 €'], ['60-100', '60 à 100 000 €'], ['gt100', '> 100 000 €']];
-const DISTS = [['all', 'Toute la zone'], ['30', '< 30 km'], ['60', '< 60 km'], ['100', '< 100 km']];
 
 function loadFilters() {
-  try { const f = JSON.parse(prefs.get('filters') || 'null'); if (f && typeof f === 'object') return { ...FILTER_DEFAULTS, ...f }; } catch { /* ignoré */ }
+  try { const f = JSON.parse(prefs.get('filters') || 'null'); if (f && typeof f === 'object') return { ...FILTER_DEFAULTS, ...f, families: Array.isArray(f.families) ? f.families : [], sites: Array.isArray(f.sites) ? f.sites : [] }; } catch { /* ignoré */ }
   return { ...FILTER_DEFAULTS };
 }
-const activeFilterCount = (f) => (f.families.length ? 1 : 0) + (f.sites.length ? 1 : 0) + (f.price !== 'all' ? 1 : 0) + (f.dist !== 'all' ? 1 : 0) + (f.sort !== 'recent' ? 1 : 0);
+const activeFilterCount = (f) => (f.families.length ? 1 : 0) + (f.sites.length ? 1 : 0) + (f.priceMin || f.priceMax ? 1 : 0) + (f.distMax ? 1 : 0) + (f.sort !== 'recent' ? 1 : 0);
 
 function applyFilters(vehicles, f, search) {
   const q = fmt.fold(search);
-  const price = (v) => (v.price === null ? null : v.price);
   let out = vehicles.filter((v) => {
     if (q && !fmt.fold(`${v.name} ${v.title} ${v.city || ''} ${v.siteLabel} ${v.note || ''} ${v.familyLabel || ''}`).includes(q)) return false;
     if (f.families.length && !f.families.includes(v.family)) return false;
     if (f.sites.length && !f.sites.includes(v.siteLabel)) return false;
-    const p = price(v);
-    if (f.price === 'lt30' && !(p !== null && p < 30000)) return false;
-    if (f.price === '30-60' && !(p !== null && p >= 30000 && p < 60000)) return false;
-    if (f.price === '60-100' && !(p !== null && p >= 60000 && p < 100000)) return false;
-    if (f.price === 'gt100' && !(p !== null && p >= 100000)) return false;
-    if (f.dist !== 'all' && !(v.distanceKm !== null && v.distanceKm <= Number(f.dist))) return false;
+    if (f.priceMin && !(v.price !== null && v.price >= f.priceMin)) return false;
+    if (f.priceMax && !(v.price !== null && v.price <= f.priceMax)) return false;
+    if (f.distMax && !(v.distanceKm !== null && v.distanceKm <= f.distMax)) return false;
     return true;
   });
   const last = (x) => (x === null || x === undefined ? Infinity : x);
@@ -281,17 +276,53 @@ function listTools(vehicles, list) {
   const f = loadFilters();
   const save = () => prefs.set('filters', JSON.stringify(f));
   const count = el('p', { class: 'muted small count-line' });
+  const resetBtn = el('button', { class: 'btn quiet small hidden', type: 'button', onclick: () => { Object.assign(f, { ...FILTER_DEFAULTS, families: [], sites: [] }); save(); drawPanel(); draw(); } }, 'Tout réinitialiser');
   const draw = () => {
     const shown = applyFilters(vehicles, f, state.search);
     list.replaceChildren(...shown.map(renderVehicle));
     if (!shown.length) list.append(el('p', { class: 'muted small' }, 'Aucune annonce ne correspond à ces filtres.'));
     count.textContent = shown.length !== vehicles.length ? `${shown.length} sur ${fmt.plural(vehicles.length, 'annonce', 'annonces')}` : '';
     btn.replaceChildren(); append(btn, svg('sliders'), 'Filtres', activeFilterCount(f) ? el('span', { class: 'badge count' }, activeFilterCount(f)) : null);
+    resetBtn.classList.toggle('hidden', !activeFilterCount(f));
     setTimeout(() => list.querySelectorAll('.message textarea').forEach(autosize), 0);
   };
   const chipRow = (label, options, isOn, onPick) => el('div', { class: 'frow' }, el('span', { class: 'flabel' }, label),
     el('div', { class: 'filterbar' }, options.map(([key, text]) => el('button', { class: 'chip', type: 'button', 'aria-pressed': String(isOn(key)), onclick: () => { onPick(key); save(); drawPanel(); draw(); } }, text))));
   const toggleIn = (arr, key) => { const i = arr.indexOf(key); if (i >= 0) arr.splice(i, 1); else arr.push(key); };
+  // Price: a bar with two handles; distance: one handle. Dragging redraws the list live, the bounds follow the list.
+  const prices = vehicles.map((v) => v.price).filter((p) => p !== null);
+  const step = 2500;
+  const priceTop = Math.max(50000, Math.ceil((Math.max(0, ...prices) + step) / 10000) * 10000);
+  const priceRow = () => {
+    const lo = Math.min(f.priceMin || 0, priceTop), hi = Math.min(f.priceMax || priceTop, priceTop);
+    const label = el('span', { class: 'fval' });
+    const setLabel = (a, b) => { label.textContent = `${a > 0 ? fmt.int(a) + ' €' : '0 €'} – ${b >= priceTop ? 'sans limite' : fmt.int(b) + ' €'}`; };
+    setLabel(lo, hi);
+    const minIn = el('input', { type: 'range', min: 0, max: priceTop, step, value: lo, 'aria-label': 'Prix minimum' });
+    const maxIn = el('input', { type: 'range', min: 0, max: priceTop, step, value: hi, 'aria-label': 'Prix maximum' });
+    const track = el('div', { class: 'track' });
+    const paint = (a, b) => { const pa = (a / priceTop) * 100, pb = (b / priceTop) * 100; track.style.background = `linear-gradient(to right, var(--line-strong) ${pa}%, var(--accent) ${pa}%, var(--accent) ${pb}%, var(--line-strong) ${pb}%)`; };
+    paint(lo, hi);
+    const onInput = () => {
+      let a = Number(minIn.value), b = Number(maxIn.value);
+      if (a > b) { if (document.activeElement === minIn) { b = a; maxIn.value = b; } else { a = b; minIn.value = a; } }
+      setLabel(a, b); paint(a, b);
+      f.priceMin = a > 0 ? a : null; f.priceMax = b < priceTop ? b : null;
+      save(); draw();
+    };
+    minIn.addEventListener('input', onInput); maxIn.addEventListener('input', onInput);
+    return el('div', { class: 'frow slider-row' }, el('span', { class: 'flabel' }, 'Prix'), el('div', { class: 'range2' }, track, minIn, maxIn), label);
+  };
+  const dists = vehicles.map((v) => v.distanceKm).filter((d) => d !== null);
+  const distTop = Math.max(50, Math.ceil((Math.max(0, ...dists) + 10) / 10) * 10);
+  const distRow = () => {
+    const cur = Math.min(f.distMax || distTop, distTop);
+    const label = el('span', { class: 'fval' });
+    const setLabel = (d) => { label.textContent = d >= distTop ? 'toute la zone' : `jusqu’à ${d} km`; };
+    setLabel(cur);
+    const input = el('input', { class: 'slider', type: 'range', min: 10, max: distTop, step: 10, value: cur, 'aria-label': 'Distance maximum', oninput: (e) => { const d = Number(e.target.value); setLabel(d); f.distMax = d < distTop ? d : null; save(); draw(); } });
+    return el('div', { class: 'frow slider-row' }, el('span', { class: 'flabel' }, 'Distance'), el('div', { class: 'range1' }, input), label);
+  };
   const panel = el('div', { class: 'filters hidden' });
   const drawPanel = () => {
     const fams = Array.from(new Map(vehicles.map((v) => [v.family, v.familyLabel])).entries()).filter(([k]) => k);
@@ -300,9 +331,9 @@ function listTools(vehicles, list) {
       chipRow('Trier', SORTS, (k) => f.sort === k, (k) => { f.sort = k; }),
       fams.length > 1 ? chipRow('Famille', fams, (k) => f.families.includes(k), (k) => toggleIn(f.families, k)) : null,
       sites.length > 1 ? chipRow('Site', sites.map((x) => [x, x]), (k) => f.sites.includes(k), (k) => toggleIn(f.sites, k)) : null,
-      chipRow('Prix', PRICES, (k) => f.price === k, (k) => { f.price = k; }),
-      chipRow('Distance', DISTS, (k) => f.dist === k, (k) => { f.dist = k; }),
-      el('div', { class: 'row between' }, count, activeFilterCount(f) ? el('button', { class: 'btn quiet small', type: 'button', onclick: () => { Object.assign(f, { ...FILTER_DEFAULTS, families: [], sites: [] }); save(); drawPanel(); draw(); } }, 'Tout réinitialiser') : null),
+      priceRow(),
+      dists.length ? distRow() : null,
+      el('div', { class: 'row between' }, count, resetBtn),
     );
   };
   const btn = el('button', { class: 'btn', type: 'button', 'aria-expanded': 'false', onclick: () => { const open = panel.classList.toggle('hidden'); btn.setAttribute('aria-expanded', String(!open)); prefs.set('filters_open', open ? '0' : '1'); } });
@@ -377,7 +408,8 @@ function followUpText(v) {
   return '';
 }
 
-const whereText = (v) => [v.city, v.distanceKm !== null ? `à ${v.distanceKm} km` : null].filter(Boolean).join(', ');
+/** City and distance; a listing located only by its department (some sites say no more) shows the department alone. */
+const whereText = (v) => (v.postalCode && String(v.postalCode).length <= 2 ? (v.city || `Dépt ${v.postalCode}`) : [v.city, v.distanceKm !== null ? `à ${v.distanceKm} km` : null].filter(Boolean).join(', '));
 /** The date shown is the site's publication date; the arrival in the app only when the site gave none. */
 const whenText = (v) => (v.publishedAt ? `publiée ${fmt.ago(v.publishedAt)}` : `reçue ${fmt.ago(v.firstSeenAt)}`);
 const whenDate = (v) => v.publishedAt || v.firstSeenAt;
@@ -483,7 +515,7 @@ function noteField(v) {
 function renderVehicle(v) {
   const card = el('article', { class: 'card listing', id: `v-${v.id}` });
   const badges = vehicleBadges(v);
-  const thumb = v.imageUrl ? el('img', { class: 'thumb', src: v.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : el('div', { class: 'thumb empty' }, svg('car'));
+  const thumb = v.imageUrl ? el('img', { class: 'thumb', src: v.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: (e) => e.target.replaceWith(el('div', { class: 'thumb empty' }, svg('car'))) }) : el('div', { class: 'thumb empty' }, svg('car'));
   const ta = messageTextarea(v);
   const { actions, primary } = vehicleActions(v, ta, { afterUpdate: () => render() });
   const link = (...children) => el('a', { class: 'plain', href: `#/annonce/${v.id}`, 'aria-label': `Voir la fiche : ${v.name}` }, ...children);
@@ -506,7 +538,7 @@ function renderVehicle(v) {
 function vehicleSheet(v, { afterUpdate, inBurst = false }) {
   const sheet = el('article', { class: 'card listing detail', id: `v-${v.id}` });
   const badges = vehicleBadges(v);
-  const photo = v.imageUrl ? el('a', { class: 'photo', href: v.url, target: '_blank', rel: 'noopener' }, el('img', { src: v.imageUrl, alt: v.title, referrerpolicy: 'no-referrer' })) : el('div', { class: 'photo empty' }, svg('car'));
+  const photo = v.imageUrl ? el('a', { class: 'photo', href: v.url, target: '_blank', rel: 'noopener' }, el('img', { src: v.imageUrl, alt: v.title, referrerpolicy: 'no-referrer', onerror: (e) => e.target.parentElement.replaceWith(el('a', { class: 'photo empty', href: v.url, target: '_blank', rel: 'noopener', title: 'Photos sur le site' }, svg('car'), el('span', { class: 'muted small' }, 'Photos sur le site'))) })) : el('div', { class: 'photo empty' }, svg('car'));
   const ta = messageTextarea(v);
   const { actions, primary, showConfirm } = vehicleActions(v, ta, { afterUpdate, inBurst });
   if (primary && !inBurst) primary.classList.add('sticky');
