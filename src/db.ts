@@ -207,6 +207,12 @@ export class Store {
   }
 
   /** When the vehicle last entered a status (contacted, replied...), from the events. */
+  /** Forgets events of the given types: a status set by mistake and undone leaves no trace in the counts. */
+  deleteEvents(vehicleId: number, types: string[]): void {
+    if (!types.length) return;
+    this.db.prepare(`DELETE FROM events WHERE vehicle_id = ? AND type IN (${types.map(() => '?').join(',')})`).run(vehicleId, ...types);
+  }
+
   lastEventAt(vehicleId: number, type: string): string | null {
     const r = this.db.prepare('SELECT at FROM events WHERE vehicle_id = ? AND type = ? ORDER BY at DESC LIMIT 1').get(vehicleId, type) as { at: string } | undefined;
     return r?.at ?? null;

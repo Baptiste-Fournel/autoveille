@@ -89,6 +89,17 @@ describe('pipeline', () => {
     expect(store.events(v.id).some((e) => e.type.startsWith('prix_'))).toBe(false);
   });
 
+  it('counts the week from events, and forgets a contact that was undone', async () => {
+    await pipeline.ingest(raw());
+    const now = new Date().toISOString();
+    store.updateVehicle(1, { status: 'contacte' }); store.addEvent(1, 'statut_contacte', null, now);
+    expect(store.weekStats(7)).toEqual({ received: 1, contacted: 1, replied: 0 });
+    expect(store.lastEventAt(1, 'statut_contacte')).toBe(now);
+    store.deleteEvents(1, ['statut_contacte', 'statut_repondu']); store.updateVehicle(1, { status: 'nouveau' });
+    expect(store.weekStats(7)).toEqual({ received: 1, contacted: 0, replied: 0 });
+    expect(store.lastEventAt(1, 'statut_contacte')).toBeNull();
+  });
+
   it('deletes a vehicle with everything attached, and can forget the read emails', async () => {
     const out = await pipeline.ingest(raw());
     store.markEmail({ message_id: '<a>', uid: 7, subject: 's', sender: 'x@y', received_at: null, site: 'leboncoin', parsed_count: 1, parsed_json: null, error: null });

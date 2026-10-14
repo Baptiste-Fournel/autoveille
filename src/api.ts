@@ -121,6 +121,9 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     if (b.status !== undefined) {
       if (!STATUSES.includes(b.status as Status)) return reply.code(400).send({ error: 'Statut inconnu.' });
       patch.status = b.status as Status;
+      // Going back (a wrong tap, « pas encore contactée ») erases the steps it cancels, so the counts stay true.
+      if (b.status === 'nouveau') store.deleteEvents(v.id, ['statut_contacte', 'statut_repondu']);
+      else if (b.status === 'contacte' && v.status === 'repondu') store.deleteEvents(v.id, ['statut_repondu']);
       store.addEvent(v.id, `statut_${b.status}`, null, now);
     }
     if (b.doNotContact !== undefined) {
