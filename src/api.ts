@@ -235,6 +235,9 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     return { mail };
   });
 
+  /** Maintenance after a rules update: names, families and fingerprints refreshed, wrong merges undone. */
+  app.post('/api/maintenance/repair', async () => pipeline.repair(store.getSettings()));
+
   /**
    * One-off import of listings read elsewhere (a search page opened by hand, say): they go through the same
    * filters as the alert emails, without notifications. Known listings are completed, not duplicated.

@@ -83,6 +83,23 @@ describe('fingerprint', () => {
     expect(similar({ km: undefined, price: 89000 }, { km: 42000, price: 86000 })).toBe(true);
     expect(similar({ price: 89000 }, { price: 60000 })).toBe(false);
   });
+
+  it('does not merge two cars of the same model whose prices disagree, even with close kilometres', () => {
+    expect(similar({ km: 45000, price: 54000 }, { km: 46000, price: 61900 })).toBe(true); // 14.6 %: a repost with a new price
+    expect(similar({ km: 45000, price: 54000 }, { km: 46000, price: 70000 })).toBe(false);
+    expect(similar({ km: 1, price: 2800 }, { km: 999, price: 200 })).toBe(false);
+  });
+
+  it('reads the model from the seller’s words when the site only gives a placeholder', () => {
+    expect(extractVehicleInfo(raw('Ford Autres - Ford ranger raptor'))).toMatchObject({ make: 'Ford', model: 'ranger raptor' });
+    expect(extractVehicleInfo(raw('Peugeot Autres - Peugeot 203'))).toMatchObject({ make: 'Peugeot', model: '203' });
+    expect(extractVehicleInfo(raw('Citroen Autres - Vente de Citroën DS 5 super'))).toMatchObject({ make: 'Citroën', model: 'DS 5 super' });
+    expect(extractVehicleInfo(raw('Renault Autres - Renault 4cv cabriolet'))).toMatchObject({ make: 'Renault', model: '4cv cabriolet' });
+    expect(extractVehicleInfo(raw('Ford Ranger RANGER DOUBLE CABINE 3.2 TDCi'))).toMatchObject({ make: 'Ford', model: 'Ranger DOUBLE CABINE' });
+    const a = raw('Ford Autres - Ford ranger raptor', { postalCode: '33000' });
+    const b = raw('Ford Autres - Ford Mustang GT', { postalCode: '33000' });
+    expect(fingerprint(extractVehicleInfo(a), a)).not.toBe(fingerprint(extractVehicleInfo(b), b));
+  });
 });
 
 describe('price written with the currency first (AutoScout24)', () => {

@@ -276,6 +276,15 @@ export class Store {
     return this.db.prepare('SELECT * FROM vehicles WHERE first_seen_at >= ? ORDER BY first_seen_at DESC').all(new Date(Date.now() - days * 86400_000).toISOString()) as VehicleRow[];
   }
 
+  allVehicles(): VehicleRow[] {
+    return this.db.prepare('SELECT * FROM vehicles ORDER BY id').all() as VehicleRow[];
+  }
+
+  /** Runs several writes as one transaction (all or nothing). */
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
   firstListingOfVehicle(vehicleId: number): ListingRow | undefined {
     return this.db.prepare('SELECT * FROM listings WHERE vehicle_id = ? ORDER BY first_seen_at LIMIT 1').get(vehicleId) as ListingRow | undefined;
   }

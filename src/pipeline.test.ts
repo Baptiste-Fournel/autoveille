@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Store } from './db.js';
+import { rawToListingRow, Store } from './db.js';
 import { Pipeline } from './pipeline.js';
 import { setGeoFetch } from './geo/geo.js';
 import type { RawListing } from './types.js';
@@ -120,5 +120,24 @@ describe('pipeline', () => {
     await pipeline.reevaluate(settings, 7, true);
     expect(store.getVehicle(2)!.matched).toBe(1);
     expect(notified).toHaveLength(1);
+  });
+
+  it('repair: renames vehicles with the current rules and separates listings merged by mistake', async () => {
+    const out = await pipeline.ingest(raw({ title: 'Ford Autres - Ford ranger raptor', price: 61900, km: 46000, year: 2024 }));
+    // An older version merged a different car into this vehicle (same placeholder model, close kilometres).
+    const other = raw({ externalId: '101', url: 'https://www.leboncoin.fr/ad/voitures/101', title: 'Ford Autres - Ford Mustang GT', price: 54000, km: 45000, year: 2024 });
+    store.insertListing(rawToListingRow(other, out.vehicleId, new Date(Date.now() + 60_000).toISOString()));
+    store.updateVehicle(out.vehicleId, { make: 'Ford', model: 'Autres', reposted: 1 });
+    const r = await pipeline.repair(store.getSettings());
+    expect(r).toMatchObject({ vehicles: 1, renamed: 1, split: 1 });
+    const v = store.getVehicle(out.vehicleId)!;
+    expect(v.model).toBe('ranger raptor');
+    expect(v.reposted).toBe(0);
+    expect(store.listingsOfVehicle(v.id)).toHaveLength(1);
+    const added = store.allVehicles().find((x) => x.id !== v.id)!;
+    expect(added).toMatchObject({ make: 'Ford', model: 'Mustang GT', price: 54000, km: 45000, status: 'nouveau', reposted: 0 });
+    expect(store.listingsOfVehicle(added.id).map((l) => l.external_id)).toEqual(['101']);
+    // A second pass changes nothing.
+    expect(await pipeline.repair(store.getSettings())).toMatchObject({ renamed: 0, split: 0, reevaluated: 0 });
   });
 });

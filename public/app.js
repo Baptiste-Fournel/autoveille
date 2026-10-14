@@ -574,7 +574,8 @@ function vehicleSheet(v, { afterUpdate, inBurst = false }) {
   const ta = messageTextarea(v);
   const { actions, primary, showConfirm } = vehicleActions(v, ta, { afterUpdate, inBurst });
   if (primary && !inBurst) primary.classList.add('sticky');
-  const siteLine = el('div', { class: 'sub' }, [whereText(v), `${v.siteLabel} · ${whenText(v)}`].filter(Boolean).join(' · '));
+  const siteLine = el('div', { class: 'sub' }, [whereText(v), `${v.siteLabel} · ${whenText(v)}`].filter(Boolean).join(' · '),
+    v.publishedAt ? null : el('span', { class: 'hint', title: 'Ce site n’indique pas la date de publication dans ses listes ni dans ses alertes : la date affichée est celle de l’arrivée dans l’application.' }, ' (date de publication non fournie par le site)'));
   const others = v.listings.length > 1 ? el('div', { class: 'others' }, 'Aussi sur ', v.listings.slice(1).map((l, i) => [i ? ', ' : '', el('a', { href: l.url, target: '_blank', rel: 'noopener' }, l.siteLabel)])) : null;
   const desc = v.description ? el('details', { class: 'adv desc', open: !inBurst }, el('summary', {}, 'Texte de l’annonce tel que reçu'), el('p', { class: 'desc-text' }, v.description)) : null;
 

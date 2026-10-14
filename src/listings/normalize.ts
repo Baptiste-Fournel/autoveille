@@ -146,16 +146,23 @@ export function titleCase(s: string): string {
 }
 
 /** Strip the trailing spec soup from a model: "911 Carrera 4S 3.0 450ch PDK" -> "911 Carrera 4S" */
+/** Category placeholders some sites put where the model goes ("Ford Autres - Ford ranger raptor"). */
+const GENERIC_MODEL = /^(autres?|divers|other|inconnu|non renseign[ée]|nc)$/i;
+
 export function extractModel(title: string, modelStart: number): string | undefined {
   const rest = cleanText(title.slice(modelStart)).replace(/^[-–:,|]+\s*/, '');
   if (!rest) return undefined;
+  if (GENERIC_MODEL.test(rest.split(' ')[0] ?? '')) return undefined;
   const tokens = rest.split(' ');
   const out: string[] = [];
   for (const tok of tokens) {
     if (out.length >= 3) break;
+    // "Ranger RANGER DOUBLE CABINE": a token repeated right after itself is noise.
+    if (out.length && tok.localeCompare(out[out.length - 1], 'fr', { sensitivity: 'base' }) === 0) continue;
     // stop at a spec token: "3.0", "450ch", "PDK", "BVA", "2015", "42000km", "diesel"
-    if (/^\d+([.,]\d+)?[lL]?$/.test(tok) && out.length > 0 && !/^\d{3,4}$/.test(tok)) break;
-    if (/^\d+(ch|cv|kw|km|l)$/i.test(tok)) break;
+    // ("Série 3", "DS 5", "Golf 7": a small number right after the first word is part of the name)
+    if (/^\d+([.,]\d+)?[lL]?$/.test(tok) && out.length > 0 && !/^\d{3,4}$/.test(tok) && !(out.length === 1 && /^\d{1,2}$/.test(tok))) break;
+    if (/^\d+(ch|cv|kw|km|l)$/i.test(tok) && out.length > 0) break; // "2cv", "4cv": a model when it comes first
     if (/^(19|20)\d\d$/.test(tok)) break;
     if (/^(pdk|bva|bvm|dsg|tiptronic|auto|automatique|manuelle|diesel|essence|hybride|electrique|électrique|dci|tdi|hdi|tfsi|tsi|cdi|phev|4x4|4wd|awd|occasion|neuf|garantie|ct|ok)$/i.test(tok)) break;
     if (/^[-–|,:]$/.test(tok)) break;
@@ -169,7 +176,16 @@ export function extractVehicleInfo(raw: RawListing, extra: CustomBrand[] = []): 
   const blob = `${title} ${raw.description ?? ''}`;
   const inTitle = detectBrand(title, extra);
   const brand = inTitle ?? detectBrand(blob, extra);
-  const model = brand ? extractModel(title, inTitle ? brand.modelStart : title.length) : undefined;
+  let model = brand ? extractModel(title, inTitle ? brand.modelStart : title.length) : undefined;
+  // "Ford Autres - Ford ranger raptor": the site's placeholder hides the model, which the seller's own
+  // words give after the separator (often starting with the brand again).
+  if (brand && inTitle && model === undefined) {
+    const after = cleanText(title.slice(inTitle.modelStart)).replace(/^\S+\s*/, '').replace(/^[-–:,|]+\s*/, '');
+    if (after) {
+      const again = detectBrand(after, extra);
+      model = extractModel(after, again && again.make === brand.make ? again.modelStart : 0);
+    }
+  }
   const family = detectFamily(brand?.make, model, blob, extra);
   return {
     make: brand?.make,
@@ -199,14 +215,17 @@ export function fingerprint(info: VehicleInfo, raw: RawListing): string {
   return createHash('sha1').update(parts.join('|')).digest('hex').slice(0, 16);
 }
 
-/** Same car? Kilometres within 5 000 km (or 10 %), or, when km is unknown on one side, price within 10 %. */
+/**
+ * Same car? Kilometres within 5 000 km (or 10 %) and, when both prices are known, price within 15 %
+ * (a repost often comes with a small price cut; two different cars of the same model rarely agree on
+ * both). When km is unknown on one side, price alone decides, within 10 %.
+ */
 export function similar(a: { km?: number | null; price?: number | null }, b: { km?: number | null; price?: number | null }): boolean {
   const ak = a.km ?? undefined, bk = b.km ?? undefined, ap = a.price ?? undefined, bp = b.price ?? undefined;
+  const priceClose = (tol: number) => ap === undefined || bp === undefined || Math.abs(ap - bp) <= tol * Math.max(ap, bp);
   if (ak !== undefined && bk !== undefined) {
-    return Math.abs(ak - bk) <= Math.max(5000, 0.1 * Math.max(ak, bk));
+    return Math.abs(ak - bk) <= Math.max(5000, 0.1 * Math.max(ak, bk)) && priceClose(0.15);
   }
-  if (ap !== undefined && bp !== undefined) {
-    return Math.abs(ap - bp) <= 0.1 * Math.max(ap, bp);
-  }
+  if (ap !== undefined && bp !== undefined) return priceClose(0.1);
   return true;
 }

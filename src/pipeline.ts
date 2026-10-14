@@ -1,4 +1,4 @@
-import type { Store, VehicleRow } from './db.js';
+import type { ListingRow, Store, VehicleRow } from './db.js';
 import { rawToListingRow } from './db.js';
 import { geocode, haversineKm, type GeoCache, type GeocodeResult } from './geo/geo.js';
 import { evaluate } from './listings/filters.js';
@@ -178,5 +178,72 @@ export class Pipeline {
       if (persist) this.store.updateVehicle(v.id, { matched: verdict.pass ? 1 : 0, reasons: JSON.stringify(verdict.reasons), distance_km: distance, make: info.make ?? null, model: info.model ?? null, family: info.family });
     }
     return { total: vehicles.length, pass };
+  }
+
+  /**
+   * Maintenance pass over every vehicle: make, model and family are read again from the listings with
+   * the current rules, fingerprints refreshed, and listings merged by mistake (two different cars of the
+   * same model) separated into their own vehicles. Verdicts are refreshed only for vehicles still waiting;
+   * decisions already taken (contacted, ignored…) are kept.
+   */
+  async repair(settings: Settings): Promise<{ vehicles: number; renamed: number; split: number; reevaluated: number }> {
+    const out = { vehicles: 0, renamed: 0, split: 0, reevaluated: 0 };
+    const brands = customBrands(settings);
+    const rawOf = (l: ListingRow, v: VehicleRow): RawListing => ({
+      site: l.site, siteLabel: l.site_label, externalId: l.external_id, url: l.url, title: l.title,
+      price: l.price ?? undefined, km: l.km ?? undefined, year: l.year ?? v.year ?? undefined,
+      city: l.city ?? v.city ?? undefined, postalCode: l.postal_code ?? v.postal_code ?? undefined,
+      sellerType: l.seller_type, description: l.description ?? undefined, publishedAt: l.published_at ?? undefined,
+    });
+    for (const v of this.store.allVehicles()) {
+      out.vehicles++;
+      const listings = this.store.listingsOfVehicle(v.id);
+      if (!listings.length) continue;
+      // Each listing's own identity; the first listing anchors the vehicle, the others stay only when they agree.
+      const keyed = listings.map((l) => { const raw = rawOf(l, v); const info = extractVehicleInfo(raw, brands); return { l, raw, info, fp: fingerprint(info, raw) }; });
+      const anchor = keyed[0];
+      const stay = [anchor];
+      const groups: Array<typeof keyed> = [];
+      for (const k of keyed.slice(1)) {
+        if (k.fp === anchor.fp && similar({ km: k.l.km ?? v.km, price: k.l.price ?? v.price }, { km: anchor.l.km ?? v.km, price: anchor.l.price ?? v.price })) { stay.push(k); continue; }
+        const g = groups.find((x) => x[0].fp === k.fp && similar({ km: k.l.km, price: k.l.price }, { km: x[0].l.km, price: x[0].l.price }));
+        if (g) g.push(k); else groups.push([k]);
+      }
+      // The vehicle itself: name and family from the current rules, verdict refreshed if still waiting.
+      const info: VehicleInfo = { make: anchor.info.make ?? v.make ?? undefined, model: anchor.info.model ?? v.model ?? undefined, family: anchor.info.make ? anchor.info.family : v.family, year: v.year ?? undefined, km: v.km ?? undefined, price: v.price ?? undefined };
+      const patch: Partial<VehicleRow> = {};
+      if ((info.make ?? null) !== v.make || (info.model ?? null) !== v.model) { patch.make = info.make ?? null; patch.model = info.model ?? null; out.renamed++; }
+      if (info.family !== v.family) patch.family = info.family;
+      if (anchor.fp !== v.fingerprint) patch.fingerprint = anchor.fp;
+      const reposted = stay.some((k, i) => stay.slice(0, i).some((o) => o.l.site === k.l.site)) ? 1 : 0;
+      if (reposted !== v.reposted) patch.reposted = reposted;
+      if (v.status === 'nouveau' && !v.do_not_contact) {
+        const verdict = evaluate(anchor.raw, info, settings, { distanceKm: v.distance_km });
+        if ((verdict.pass ? 1 : 0) !== v.matched || JSON.stringify(verdict.reasons) !== v.reasons) { patch.matched = verdict.pass ? 1 : 0; patch.reasons = JSON.stringify(verdict.reasons); out.reevaluated++; }
+      }
+      if (Object.keys(patch).length) this.store.updateVehicle(v.id, patch);
+      // Listings that were another car: a vehicle of their own, judged on their own data.
+      for (const g of groups) {
+        const first = g[0];
+        const ginfo = first.info;
+        const geo = await this.distanceFor(first.raw.city, first.raw.postalCode, settings);
+        const verdict = evaluate(first.raw, ginfo, settings, { distanceKm: geo.distance });
+        const published = g.map((k) => k.l.published_at).filter((d): d is string => !!d).sort()[0] ?? null;
+        this.store.transaction(() => {
+          const id = this.store.insertVehicle({
+            fingerprint: first.fp, make: ginfo.make ?? null, model: ginfo.model ?? null, family: ginfo.family,
+            year: ginfo.year ?? null, km: ginfo.km ?? null, price: ginfo.price ?? null,
+            city: first.raw.city ?? null, postal_code: first.raw.postalCode ?? null, lat: geo.lat, lon: geo.lon, distance_km: geo.distance,
+            status: 'nouveau', do_not_contact: 0, matched: verdict.pass ? 1 : 0, reasons: JSON.stringify(verdict.reasons),
+            message_override: null, first_seen_at: first.l.first_seen_at, last_seen_at: g.map((k) => k.l.last_seen_at).sort().pop() ?? first.l.last_seen_at,
+            notified_at: null, price_dropped: 0, reposted: g.some((k, i) => g.slice(0, i).some((o) => o.l.site === k.l.site)) ? 1 : 0, note: null, published_at: published,
+          });
+          for (const k of g) this.store.updateListing(k.l.id, { vehicle_id: id });
+          this.store.addEvent(id, 'nouveau', first.l.site_label, first.l.first_seen_at);
+        });
+        out.split++;
+      }
+    }
+    return out;
   }
 }
