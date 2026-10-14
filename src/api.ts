@@ -85,7 +85,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     const settings = store.getSettings();
     const status = req.query.status ?? 'nouveau';
     const days = req.query.days ? Number(req.query.days) : undefined;
-    const limit = req.query.limit ? Number(req.query.limit) : 150;
+    const limit = req.query.limit ? Number(req.query.limit) : 1000;
     if (status === 'ecartees') {
       // Wide alerts on the sites mean many refusals: they are grouped by reason so a good deal is quick to spot.
       const all = store.listVehicles({ onlyMatched: false, sinceDays: days ?? 14, limit: 3000 }).filter((v) => !v.matched);

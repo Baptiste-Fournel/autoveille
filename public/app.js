@@ -277,9 +277,14 @@ function listTools(vehicles, list) {
   const save = () => prefs.set('filters', JSON.stringify(f));
   const count = el('p', { class: 'muted small count-line' });
   const resetBtn = el('button', { class: 'btn quiet small hidden', type: 'button', onclick: () => { Object.assign(f, { ...FILTER_DEFAULTS, families: [], sites: [] }); save(); drawPanel(); draw(); } }, 'Tout réinitialiser');
-  const draw = () => {
+  // Long lists come in pages of 40 cards: the phone stays fluid, « Afficher la suite » loads the next ones.
+  const PAGE = 40;
+  let limit = PAGE;
+  const draw = (keepLimit = false) => {
+    if (!keepLimit) limit = PAGE;
     const shown = applyFilters(vehicles, f, state.search);
-    list.replaceChildren(...shown.map(renderVehicle));
+    list.replaceChildren(...shown.slice(0, limit).map(renderVehicle));
+    if (shown.length > limit) list.append(el('button', { class: 'btn more', type: 'button', onclick: () => { limit += PAGE; draw(true); } }, `Afficher la suite (${shown.length - limit} restantes)`));
     if (!shown.length) list.append(el('p', { class: 'muted small' }, 'Aucune annonce ne correspond à ces filtres.'));
     count.textContent = shown.length !== vehicles.length ? `${shown.length} sur ${fmt.plural(vehicles.length, 'annonce', 'annonces')}` : '';
     btn.replaceChildren(); append(btn, svg('sliders'), 'Filtres', activeFilterCount(f) ? el('span', { class: 'badge count' }, activeFilterCount(f)) : null);

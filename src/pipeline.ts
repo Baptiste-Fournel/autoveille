@@ -96,7 +96,8 @@ export class Pipeline {
         if (vehicle.price === null && raw.price !== undefined) patch.price = raw.price;
         if (vehicle.km === null && raw.km !== undefined) patch.km = raw.km;
         if (vehicle.year === null && raw.year !== undefined) patch.year = raw.year;
-        if (!existing.image_url && raw.imageUrl) this.store.updateListing(existing.id, { image_url: raw.imageUrl });
+        // A fresher photo link replaces the old one: some sites sign their image links, and a signature can expire.
+        if (raw.imageUrl && raw.imageUrl !== existing.image_url) this.store.updateListing(existing.id, { image_url: raw.imageUrl });
         if (!existing.description && raw.description) this.store.updateListing(existing.id, { description: raw.description });
         if (!existing.published_at && raw.publishedAt) this.store.updateListing(existing.id, { published_at: raw.publishedAt });
         if (raw.publishedAt && (!vehicle.published_at || raw.publishedAt < vehicle.published_at)) patch.published_at = raw.publishedAt;
