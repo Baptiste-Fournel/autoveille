@@ -1,0 +1,10 @@
+#cloud-config
+# À coller dans le champ "user data" / "cloud-init" à la création du serveur (Oracle Cloud, Hetzner, OVH…).
+# Remplacez REPO_URL par l'adresse du dépôt git public contenant AutoVeille.
+# Le code de première connexion s'affiche à la fin dans /root/autoveille-setup.txt (et dans le journal cloud-init).
+package_update: true
+runcmd:
+  - export REPO_URL="https://github.com/VOTRE-COMPTE/autoveille.git"
+  - export SETUP_CODE="CODE-A-REMPLACER"
+  - mkdir -p /opt && cd /opt && (test -d autoveille || git clone -q "$REPO_URL" autoveille)
+  - cd /opt/autoveille && REPO_URL="$REPO_URL" SETUP_CODE="$SETUP_CODE" bash deploy/install.sh 2>&1 | tee /var/log/autoveille-install.log

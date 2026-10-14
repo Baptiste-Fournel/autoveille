@@ -1,0 +1,85 @@
+import { describe, expect, it } from 'vitest';
+import { extractVehicleInfo, fingerprint, parseKm, parseLocation, parsePrice, parseYear, similar } from './normalize.js';
+import { detectBrand, detectFamily } from './brands.js';
+import type { RawListing } from '../types.js';
+
+const raw = (title: string, extra: Partial<RawListing> = {}): RawListing => ({ site: 'test', siteLabel: 'Test', externalId: '1', url: 'https://x/1', title, ...extra });
+
+describe('parsers', () => {
+  it('parses prices with French thousands separators', () => {
+    expect(parsePrice('Prix 89 900 €')).toBe(89900);
+    expect(parsePrice('89900€')).toBe(89900);
+    expect(parsePrice('89.900 EUR')).toBe(89900);
+    expect(parsePrice('12 500 € 42 000 km')).toBe(12500);
+    expect(parsePrice('rien ici')).toBeUndefined();
+    expect(parsePrice('Ferrari F430 F1 119 000 €')).toBe(119000);
+    expect(parseKm('Ferrari F430 F1 31 000 km')).toBe(31000);
+  });
+
+  it('parses kilometres and ignores short distances', () => {
+    expect(parseKm('42 000 km')).toBe(42000);
+    expect(parseKm('42000km')).toBe(42000);
+    expect(parseKm('à 12 km de chez vous, 65 500 kms')).toBe(65500);
+  });
+
+  it('parses years, preferring labelled ones', () => {
+    expect(parseYear('Porsche 911 2015 42 000 km')).toBe(2015);
+    expect(parseYear('Année : 2009, 1ère main')).toBe(2009);
+    expect(parseYear('Mercedes 190 Evo 2 1990')).toBe(1990);
+    expect(parseYear('BMW 2002 tii 1973')).toBe(2002); // ambiguous, first standalone year wins
+    expect(parseYear('prix 2000 €')).toBeUndefined();
+  });
+
+  it('parses locations', () => {
+    expect(parseLocation('Mérignac 33700')).toEqual({ city: 'Mérignac', postalCode: '33700' });
+    expect(parseLocation('33700 Mérignac')).toEqual({ city: 'Mérignac', postalCode: '33700' });
+    expect(parseLocation('Bordeaux (33)')).toEqual({ city: 'Bordeaux', postalCode: '33000' });
+    expect(parseLocation('Saint-Médard-en-Jalles (33)').city).toBe('Saint-Médard-En-Jalles');
+  });
+});
+
+describe('brands and families', () => {
+  it('detects brands with aliases, longest first', () => {
+    expect(detectBrand('Mercedes AMG GT 63 S')?.make).toBe('Mercedes-Benz');
+    expect(detectBrand('Alfa Romeo 4C')?.make).toBe('Alfa Romeo');
+    expect(detectBrand('Dodge RAM 1500')?.make).toBe('RAM');
+    expect(detectBrand('VW Golf GTI')?.make).toBe('Volkswagen');
+    expect(detectBrand('Citroen DS 21')?.make).toBe('Citroën');
+    expect(detectBrand('Renault Clio')).toBeTruthy();
+    expect(detectBrand('Toyota Supra')).toBeUndefined();
+  });
+
+  it('only counts American Fords', () => {
+    expect(detectFamily('Ford', 'Mustang GT', 'Ford Mustang GT 5.0')).toBe('americaines');
+    expect(detectFamily('Ford', 'Fiesta', 'Ford Fiesta 1.0')).toBe('autres');
+  });
+
+  it('extracts make, model, year, km and price from a title', () => {
+    const info = extractVehicleInfo(raw('Porsche 911 Carrera 4S 3.0 450ch PDK 2017 42 000 km 112 900 €'));
+    expect(info).toMatchObject({ make: 'Porsche', model: '911 Carrera 4S', family: 'allemandes', year: 2017, km: 42000, price: 112900 });
+  });
+
+  it('keeps source fields when given', () => {
+    const info = extractVehicleInfo(raw('BMW M3 Compétition', { year: 2021, km: 18000, price: 79000 }));
+    expect(info).toMatchObject({ make: 'BMW', model: 'M3 Compétition', year: 2021, km: 18000, price: 79000 });
+  });
+});
+
+describe('fingerprint', () => {
+  it('matches the same car across sites and reposts, within a km bucket', () => {
+    const a = raw('Porsche 911 Carrera S 2015 42 000 km 89 900 €', { postalCode: '33700', site: 'leboncoin' });
+    const b = raw('PORSCHE 911 CARRERA S PDK 2015', { km: 43500, price: 88000, postalCode: '33000', site: 'lacentrale', externalId: '9' });
+    expect(fingerprint(extractVehicleInfo(a), a)).toBe(fingerprint(extractVehicleInfo(b), b));
+  });
+
+  it('separates different years, and far-apart kilometres through similar()', () => {
+    const a = raw('Porsche 911 Carrera S 2015 42 000 km', { postalCode: '33700' });
+    const b = raw('Porsche 911 Carrera S 2016 42 000 km', { postalCode: '33700' });
+    expect(fingerprint(extractVehicleInfo(a), a)).not.toBe(fingerprint(extractVehicleInfo(b), b));
+    expect(similar({ km: 42000 }, { km: 43500 })).toBe(true);
+    expect(similar({ km: 42000 }, { km: 95000 })).toBe(false);
+    expect(similar({ km: 150000 }, { km: 162000 })).toBe(true);
+    expect(similar({ km: undefined, price: 89000 }, { km: 42000, price: 86000 })).toBe(true);
+    expect(similar({ price: 89000 }, { price: 60000 })).toBe(false);
+  });
+});

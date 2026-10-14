@@ -1,0 +1,38 @@
+{
+  "name": "autoveille",
+  "version": "1.0.0",
+  "description": "Veille d'annonces automobiles avec messages personnalisés prêts à envoyer",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "parse-email": "tsx src/cli/parse-email.ts",
+    "demo": "tsx src/cli/demo.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/static": "^10.1.6",
+    "better-sqlite3": "^13.0.3",
+    "cheerio": "^1.2.0",
+    "fastify": "^5.12.7",
+    "imapflow": "^2.4.2",
+    "mailparser": "^3.9.39",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/mailparser": "^3.9.0",
+    "@types/node": "^26.6.5",
+    "@types/web-push": "^3.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.4"
+  },
+  "type": "module"
+}
