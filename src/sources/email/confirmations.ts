@@ -101,10 +101,14 @@ export function alertMismatch(a: AlertConfirmation, settings: Settings): string[
 }
 
 /** When the alert is no wider than the settings, a hint to open the net: the app sorts, the rest stays readable. */
+/** The widest radius a site offers: no point advising beyond it. */
+const RADIUS_CAP: Record<string, number> = { paruvendu: 100 };
+
 export function alertAdvice(a: AlertConfirmation, settings: Settings): string | undefined {
   const b = alertBounds(settings);
   const tight: string[] = [];
-  if (a.radiusKm && settings.zone.radiusKm > 0 && a.radiusKm <= settings.zone.radiusKm) tight.push(`${b.radiusKm} km de rayon`);
+  const cap = RADIUS_CAP[a.site];
+  if (a.radiusKm && settings.zone.radiusKm > 0 && a.radiusKm <= settings.zone.radiusKm && !(cap && a.radiusKm >= cap)) tight.push(`${b.radiusKm} km de rayon`);
   if (a.maxKm && settings.maxKm > 0 && a.maxKm <= settings.maxKm) tight.push(`${fmtInt(b.maxKm)} km au compteur`);
   if (!tight.length) return undefined;
   return `Cette alerte est réglée au plus juste. Vous pouvez l’élargir (${tight.join(', ')}) : l’application garde votre tri, et les annonces écartées restent consultables au cas où une bonne affaire s’y cache.`;

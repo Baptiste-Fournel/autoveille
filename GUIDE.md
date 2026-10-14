@@ -29,7 +29,11 @@ Un doigt qui glisse : chaque changement affiche « Annuler » pendant quelques s
 
 Toucher la photo ou le titre d'une annonce ouvre sa **fiche** : grande photo, caractéristiques, texte de l'annonce tel que reçu, message modifiable, et une **note** pour vous (ce que le vendeur a dit, un prix, quand rappeler), visible ensuite sur la carte. Le bouton principal reste au bas de l'écran pendant la lecture.
 
-Dans « Contactées », chaque carte indique depuis combien de jours le vendeur a été contacté ; dans « Ont répondu », depuis quand. Une ligne en haut de l'écran résume les sept derniers jours : annonces retenues, contactées, réponses. Dès que la liste s'allonge, un champ de recherche filtre par modèle, marque ou ville.
+Dans « Contactées », chaque carte indique depuis combien de jours le vendeur a été contacté ; dans « Ont répondu », depuis quand. Une ligne en haut de l'écran résume les sept derniers jours : annonces retenues, contactées, réponses.
+
+La date affichée sur une annonce est celle de sa publication sur le site (« publiée hier à 10:02 ») ; les annonces sont classées de la plus récente à la plus ancienne. Un champ de recherche filtre par modèle, marque ou ville, et le bouton **Filtres** trie (plus récentes, prix, distance, kilométrage) et restreint par famille, par site, par prix et par distance, à la barre. Les choix restent mémorisés sur l'appareil.
+
+Dans Réglages > Affichage, l'application peut suivre le thème de l'appareil, ou rester claire ou sombre.
 
 Plusieurs annonces à traiter : **Traiter en rafale**. Elles défilent une par une : « Ouvrir l'annonce et copier le message », coller, envoyer, revenir ; l'application demande « Message envoyé ? » et passe à la suivante. Dix annonces se traitent en une minute, et chaque envoi reste le vôtre.
 
@@ -55,6 +59,7 @@ Un message par famille, avec plusieurs variantes tirées au hasard pour ne pas e
 - Un email est reçu mais « aucune annonce reconnue » : le site a changé le format de ses emails. Le transmettre à la personne qui maintient l'outil (télécharger l'email en .eml depuis Gmail).
 - Une voiture a été écartée à tort : onglet « Écartées par les filtres », la raison est affichée, « Garder quand même » la remet dans la file.
 - Après une mise à jour de l'application : dans **Sites**, « Tout relire » relit toute la boîte mail ; les annonces connues sont complétées, pas dupliquées.
+- Les photos de certains sites (La Centrale) ne s'affichent que sur le site lui-même : l'application montre alors une icône, et la fiche propose « Photos sur le site ».
 
 ## Ce que l'application ne fait pas
 
