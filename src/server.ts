@@ -61,8 +61,17 @@ export async function buildServer(opts: { dataDir?: string; store?: Store } = {}
 
   app.addHook('onRequest', async (req, reply) => {
     if (!req.url.startsWith('/api/')) return;
-    if (['/api/me', '/api/login', '/api/setup'].includes(req.url.split('?')[0])) return;
+    const path = req.url.split('?')[0];
+    if (['/api/me', '/api/login', '/api/setup'].includes(path)) return;
+    // The one-off import may come from another site's page (a search page read in the browser): it carries
+    // the import token in its body instead of the session cookie, and is checked by its handler.
+    if (path === '/api/import' && req.method === 'POST' && (req.headers['content-type'] ?? '').startsWith('text/plain')) return;
     if (!sessionOf(req)) return reply.code(401).send({ error: 'non connecté' });
+  });
+
+  // A text/plain body is a JSON payload sent without a CORS preflight (see /api/import).
+  app.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
+    try { done(null, JSON.parse(String(body))); } catch { done(null, {}); }
   });
 
   app.get('/api/me', async (req) => ({ authenticated: Boolean(sessionOf(req)), needsSetup: needsSetup(), setupCodeRequired: Boolean(config.setupCode) }));

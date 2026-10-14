@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Store, VehicleRow } from './db.js';
 import type { Pipeline } from './pipeline.js';
 import type { AppNotifier } from './notify/notify.js';
@@ -237,7 +238,18 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
    * One-off import of listings read elsewhere (a search page opened by hand, say): they go through the same
    * filters as the alert emails, without notifications. Known listings are completed, not duplicated.
    */
-  app.post<{ Body: { listings?: Array<Partial<RawListing>>; notify?: boolean } }>('/api/import', async (req, reply) => {
+  app.get('/api/import/token', async () => {
+    let token = store.secret('import_token');
+    if (!token) { token = randomBytes(24).toString('hex'); store.setSecret('import_token', token); }
+    return { token };
+  });
+
+  app.post<{ Body: { listings?: Array<Partial<RawListing>>; notify?: boolean; token?: string } }>('/api/import', async (req, reply) => {
+    const viaToken = (req.headers['content-type'] ?? '').startsWith('text/plain');
+    if (viaToken) {
+      const expected = store.secret('import_token');
+      if (!expected || !req.body?.token || req.body.token.length !== expected.length || !timingSafeEqual(Buffer.from(req.body.token), Buffer.from(expected))) return reply.code(401).send({ error: 'jeton invalide' });
+    }
     const items = Array.isArray(req.body?.listings) ? req.body.listings.slice(0, 500) : [];
     if (!items.length) return reply.code(400).send({ error: 'Aucune annonce à importer.' });
     const settings = store.getSettings();
