@@ -49,6 +49,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
       specialReason: special ?? null,
       priceDropped: Boolean(v.price_dropped), reposted: Boolean(v.reposted),
       firstSeenAt: v.first_seen_at, lastSeenAt: v.last_seen_at,
+      publishedAt: v.published_at ?? listings.map((l) => l.published_at).filter((d): d is string => Boolean(d)).sort()[0] ?? null,
       url: first?.url ?? '', site: first?.site ?? '', siteLabel: first?.site_label ?? '',
       imageUrl: withImage?.image_url ?? null,
       description: listings.find((l) => l.description)?.description ?? null,
@@ -267,6 +268,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
         imageUrl: it.imageUrl && /^https?:/i.test(String(it.imageUrl)) ? String(it.imageUrl).slice(0, 1000) : undefined,
         description: it.description ? String(it.description).slice(0, 4000) : undefined,
         sellerType: it.sellerType === 'pro' || it.sellerType === 'particulier' ? it.sellerType : undefined,
+        publishedAt: it.publishedAt && !Number.isNaN(Date.parse(String(it.publishedAt))) ? new Date(String(it.publishedAt)).toISOString() : undefined,
       };
       try {
         const r = await pipeline.ingest(raw, settings, { notify: req.body?.notify === true });

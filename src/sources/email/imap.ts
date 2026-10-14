@@ -63,7 +63,10 @@ export async function pollMailbox(cfg: ImapConfig, store: Store, pipeline: Pipel
           }
 
           let matched = 0;
+          const emailDate = parsed.date && !Number.isNaN(parsed.date.getTime()) ? parsed.date.toISOString() : undefined;
           for (const listing of out.listings) {
+            // Alerts leave within minutes of the publication: the email's date is the best date we have.
+            if (!listing.publishedAt && emailDate) listing.publishedAt = emailDate;
             const r = await pipeline.ingest(listing);
             if (r.kind === 'new' && r.matched) matched++;
           }

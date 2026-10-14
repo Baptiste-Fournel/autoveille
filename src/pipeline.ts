@@ -98,6 +98,8 @@ export class Pipeline {
         if (vehicle.year === null && raw.year !== undefined) patch.year = raw.year;
         if (!existing.image_url && raw.imageUrl) this.store.updateListing(existing.id, { image_url: raw.imageUrl });
         if (!existing.description && raw.description) this.store.updateListing(existing.id, { description: raw.description });
+        if (!existing.published_at && raw.publishedAt) this.store.updateListing(existing.id, { published_at: raw.publishedAt });
+        if (raw.publishedAt && (!vehicle.published_at || raw.publishedAt < vehicle.published_at)) patch.published_at = raw.publishedAt;
         if (Object.keys(patch).length) {
           if (vehicle.status === 'nouveau' && !vehicle.do_not_contact) {
             const merged = { ...info, price: patch.price ?? vehicle.price ?? undefined, km: patch.km ?? vehicle.km ?? undefined, year: patch.year ?? vehicle.year ?? undefined };
@@ -118,7 +120,7 @@ export class Pipeline {
       const siblings = this.store.listingsOfVehicle(vehicle.id);
       const sameSite = siblings.some((l) => l.site === raw.site);
       this.store.insertListing(rawToListingRow(raw, vehicle.id, now));
-      this.store.updateVehicle(vehicle.id, { last_seen_at: now, reposted: sameSite ? 1 : vehicle.reposted });
+      this.store.updateVehicle(vehicle.id, { last_seen_at: now, reposted: sameSite ? 1 : vehicle.reposted, ...(raw.publishedAt && (!vehicle.published_at || raw.publishedAt < vehicle.published_at) ? { published_at: raw.publishedAt } : {}) });
       this.store.addEvent(vehicle.id, sameSite ? 'republiee' : 'autre_site', `${raw.siteLabel} ${raw.url}`, now);
       return { kind: sameSite ? 'repost' : 'other_site', vehicleId: vehicle.id };
     }
@@ -133,6 +135,7 @@ export class Pipeline {
       city: raw.city ?? null, postal_code: raw.postalCode ?? null, lat: geo.lat, lon: geo.lon, distance_km: geo.distance,
       status: 'nouveau', do_not_contact: 0, matched: verdict.pass ? 1 : 0, reasons: JSON.stringify(verdict.reasons),
       message_override: null, first_seen_at: now, last_seen_at: now, notified_at: null, price_dropped: 0, reposted: 0, note: null,
+      published_at: raw.publishedAt ?? null,
     });
     this.store.insertListing(rawToListingRow(raw, vehicleId, now));
     this.store.addEvent(vehicleId, 'nouveau', raw.siteLabel, now);

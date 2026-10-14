@@ -20,6 +20,7 @@
   --gutter: 16px;
   --font: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
+/* Dark theme: follows the system unless the person chose one in Réglages (data-theme on <html>). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper: #15171A;
@@ -39,6 +40,28 @@
     --danger-soft: #3A2220;
   }
 }
+:root[data-theme="dark"] {
+  --paper: #15171A;
+  --surface: #1E2126;
+  --ink: #F1F0EC;
+  --ink-2: #CFCBC2;
+  --muted: #9AA3AF;
+  --line: #2D3138;
+  --line-strong: #434952;
+  --accent: #3F9A66;
+  --accent-hover: #4FB07A;
+  --accent-soft: #1E3328;
+  --tag: #E4BC3F;
+  --tag-ink: #1E1600;
+  --info-soft: #232B36;
+  --danger: #E36B62;
+  --danger-soft: #3A2220;
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+.segmented { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px; gap: 2px; background: var(--surface); }
+.segmented button { border: 0; background: transparent; color: var(--ink-2); border-radius: 999px; padding: 7px 14px; font-weight: 500; cursor: pointer; min-height: 36px; }
+.segmented button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -329,6 +352,15 @@ table.emails td.n .unit { display: none; }
 .steps .label { flex: 1 1 auto; font-size: 15px; }
 .steps li.done .label { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-strong); }
 .steps .btn { flex: 0 0 auto; }
+.tools { display: flex; flex-direction: column; gap: 10px; }
+.toolbar { display: flex; gap: 8px; align-items: center; }
+.toolbar .searchbox { flex: 1 1 auto; }
+.toolbar .btn { flex: 0 0 auto; }
+.filters { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.frow { display: flex; align-items: center; gap: 10px; }
+.flabel { flex: 0 0 64px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+.frow .filterbar { flex: 1 1 auto; min-width: 0; }
+.count-line { min-height: 1em; }
 .searchbox { position: relative; display: flex; flex-direction: column; gap: 6px; }
 .searchbox > svg { position: absolute; left: 12px; top: 13px; width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
 .searchbox .input { padding-left: 38px; }

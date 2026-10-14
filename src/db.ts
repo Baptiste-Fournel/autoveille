@@ -30,6 +30,8 @@ export interface VehicleRow {
   reposted: number;
   /** Free text the person keeps on the vehicle (an appointment, the price asked...). */
   note: string | null;
+  /** When the listing was published on the site (earliest known), used for display and ordering. */
+  published_at: string | null;
 }
 
 export interface ListingRow {
@@ -122,6 +124,7 @@ export class Store {
     if (!cols.includes('description')) this.db.exec('ALTER TABLE listings ADD COLUMN description TEXT');
     const vcols = (this.db.prepare('PRAGMA table_info(vehicles)').all() as Array<{ name: string }>).map((c) => c.name);
     if (!vcols.includes('note')) this.db.exec('ALTER TABLE vehicles ADD COLUMN note TEXT');
+    if (!vcols.includes('published_at')) this.db.exec('ALTER TABLE vehicles ADD COLUMN published_at TEXT');
   }
 
   // ---------- settings ----------
@@ -153,8 +156,8 @@ export class Store {
   }
 
   insertVehicle(v: Omit<VehicleRow, 'id'>): number {
-    const r = this.db.prepare(`INSERT INTO vehicles (fingerprint, make, model, family, year, km, price, city, postal_code, lat, lon, distance_km, status, do_not_contact, matched, reasons, message_override, first_seen_at, last_seen_at, notified_at, price_dropped, reposted)
-      VALUES (@fingerprint, @make, @model, @family, @year, @km, @price, @city, @postal_code, @lat, @lon, @distance_km, @status, @do_not_contact, @matched, @reasons, @message_override, @first_seen_at, @last_seen_at, @notified_at, @price_dropped, @reposted)`).run(v);
+    const r = this.db.prepare(`INSERT INTO vehicles (fingerprint, make, model, family, year, km, price, city, postal_code, lat, lon, distance_km, status, do_not_contact, matched, reasons, message_override, first_seen_at, last_seen_at, notified_at, price_dropped, reposted, note, published_at)
+      VALUES (@fingerprint, @make, @model, @family, @year, @km, @price, @city, @postal_code, @lat, @lon, @distance_km, @status, @do_not_contact, @matched, @reasons, @message_override, @first_seen_at, @last_seen_at, @notified_at, @price_dropped, @reposted, @note, @published_at)`).run(v);
     return Number(r.lastInsertRowid);
   }
 
@@ -252,7 +255,8 @@ export class Store {
     if (opts.onlyMatched !== false) where.push('matched = 1');
     if (opts.status && opts.status !== 'tous') { where.push('status = @status'); params.status = opts.status; }
     if (opts.sinceDays) { where.push('first_seen_at >= @since'); params.since = new Date(Date.now() - opts.sinceDays * 86400_000).toISOString(); }
-    const sql = `SELECT * FROM vehicles ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY first_seen_at DESC LIMIT @limit`;
+    // Newest listings first, by the date the site published them when it is known.
+    const sql = `SELECT * FROM vehicles ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY COALESCE(published_at, first_seen_at) DESC LIMIT @limit`;
     return this.db.prepare(sql).all({ ...params, limit: opts.limit ?? 200 }) as VehicleRow[];
   }
 

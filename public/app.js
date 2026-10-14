@@ -65,7 +65,8 @@ const fmt = {
     if (diff < 3600) return `il y a ${Math.floor(diff / 60)} min`;
     if (diff < 86400 && d.getDate() === new Date().getDate()) return `aujourd’hui à ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
     if (diff < 172800) return `hier à ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
-    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const sameYear = d.getFullYear() === new Date().getFullYear();
+    return 'le ' + d.toLocaleDateString('fr-FR', sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
   },
   plural: (n, s, p) => `${fmt.int(n)} ${n > 1 ? p : s}`,
   /** Lower case without accents, for searching. */
@@ -222,7 +223,7 @@ async function renderAnnonces() {
   }
 
   const list = el('div', { class: 'stack' });
-  let search = null;
+  let tools = null;
   if (!state.vehicles.length) {
     list.append(el('div', { class: 'empty' }, svg('car'),
       el('b', {}, state.filter === 'nouveau' ? 'Aucune annonce en attente' : state.filter === 'ecartees' ? 'Rien d’écarté dans cette catégorie' : 'Rien ici'),
@@ -230,23 +231,86 @@ async function renderAnnonces() {
       !ov.imapConfigured ? el('a', { class: 'btn', href: '#/sources' }, 'Relier la boîte mail des alertes') : null,
     ));
   } else {
-    const cards = state.vehicles.map((v) => [v, renderVehicle(v)]);
-    for (const [, card] of cards) list.append(card);
-    if (state.vehicles.length >= 6) {
-      const none = el('p', { class: 'muted small hidden' }, 'Aucune annonce ne correspond.');
-      const input = el('input', { class: 'input', type: 'search', placeholder: 'Rechercher : modèle, marque, ville…', value: state.search, 'aria-label': 'Rechercher dans la liste', oninput: (e) => {
-        state.search = e.target.value;
-        const q = fmt.fold(state.search);
-        let shown = 0;
-        for (const [v, card] of cards) { const hit = !q || fmt.fold(`${v.name} ${v.title} ${v.city || ''} ${v.siteLabel} ${v.note || ''}`).includes(q); card.classList.toggle('hidden', !hit); if (hit) shown++; }
-        none.classList.toggle('hidden', shown > 0);
-      } });
-      search = el('div', { class: 'searchbox' }, svg('search'), input, none);
-      if (state.search) setTimeout(() => input.dispatchEvent(new Event('input')), 0);
-    }
+    tools = listTools(state.vehicles, list);
   }
   setTimeout(() => document.querySelectorAll('.message textarea').forEach(autosize), 0);
-  return [head, setup, issues, bar, kinds, search, list];
+  return [head, setup, issues, bar, kinds, tools, list];
+}
+
+// ---------- tri et filtres de la liste ----------
+const FILTER_DEFAULTS = { sort: 'recent', families: [], sites: [], price: 'all', dist: 'all' };
+const SORTS = [['recent', 'Plus récentes'], ['priceDesc', 'Prix décroissant'], ['priceAsc', 'Prix croissant'], ['near', 'Les plus proches'], ['kmAsc', 'Moins de km']];
+const PRICES = [['all', 'Tous'], ['lt30', '< 30 000 €'], ['30-60', '30 à 60 000 €'], ['60-100', '60 à 100 000 €'], ['gt100', '> 100 000 €']];
+const DISTS = [['all', 'Toute la zone'], ['30', '< 30 km'], ['60', '< 60 km'], ['100', '< 100 km']];
+
+function loadFilters() {
+  try { const f = JSON.parse(prefs.get('filters') || 'null'); if (f && typeof f === 'object') return { ...FILTER_DEFAULTS, ...f }; } catch { /* ignoré */ }
+  return { ...FILTER_DEFAULTS };
+}
+const activeFilterCount = (f) => (f.families.length ? 1 : 0) + (f.sites.length ? 1 : 0) + (f.price !== 'all' ? 1 : 0) + (f.dist !== 'all' ? 1 : 0) + (f.sort !== 'recent' ? 1 : 0);
+
+function applyFilters(vehicles, f, search) {
+  const q = fmt.fold(search);
+  const price = (v) => (v.price === null ? null : v.price);
+  let out = vehicles.filter((v) => {
+    if (q && !fmt.fold(`${v.name} ${v.title} ${v.city || ''} ${v.siteLabel} ${v.note || ''} ${v.familyLabel || ''}`).includes(q)) return false;
+    if (f.families.length && !f.families.includes(v.family)) return false;
+    if (f.sites.length && !f.sites.includes(v.siteLabel)) return false;
+    const p = price(v);
+    if (f.price === 'lt30' && !(p !== null && p < 30000)) return false;
+    if (f.price === '30-60' && !(p !== null && p >= 30000 && p < 60000)) return false;
+    if (f.price === '60-100' && !(p !== null && p >= 60000 && p < 100000)) return false;
+    if (f.price === 'gt100' && !(p !== null && p >= 100000)) return false;
+    if (f.dist !== 'all' && !(v.distanceKm !== null && v.distanceKm <= Number(f.dist))) return false;
+    return true;
+  });
+  const last = (x) => (x === null || x === undefined ? Infinity : x);
+  if (f.sort === 'priceDesc') out.sort((a, b) => (b.price ?? -1) - (a.price ?? -1));
+  else if (f.sort === 'priceAsc') out.sort((a, b) => last(a.price) - last(b.price));
+  else if (f.sort === 'near') out.sort((a, b) => last(a.distanceKm) - last(b.distanceKm));
+  else if (f.sort === 'kmAsc') out.sort((a, b) => last(a.km) - last(b.km));
+  else out.sort((a, b) => new Date(whenDate(b)) - new Date(whenDate(a)));
+  return out;
+}
+
+/**
+ * Search box, « Filtres » button and the filter panel. The list is redrawn in place on every change,
+ * so the keyboard stays open and the choices are kept on this device.
+ */
+function listTools(vehicles, list) {
+  const f = loadFilters();
+  const save = () => prefs.set('filters', JSON.stringify(f));
+  const count = el('p', { class: 'muted small count-line' });
+  const draw = () => {
+    const shown = applyFilters(vehicles, f, state.search);
+    list.replaceChildren(...shown.map(renderVehicle));
+    if (!shown.length) list.append(el('p', { class: 'muted small' }, 'Aucune annonce ne correspond à ces filtres.'));
+    count.textContent = shown.length !== vehicles.length ? `${shown.length} sur ${fmt.plural(vehicles.length, 'annonce', 'annonces')}` : '';
+    btn.replaceChildren(); append(btn, svg('sliders'), 'Filtres', activeFilterCount(f) ? el('span', { class: 'badge count' }, activeFilterCount(f)) : null);
+    setTimeout(() => list.querySelectorAll('.message textarea').forEach(autosize), 0);
+  };
+  const chipRow = (label, options, isOn, onPick) => el('div', { class: 'frow' }, el('span', { class: 'flabel' }, label),
+    el('div', { class: 'filterbar' }, options.map(([key, text]) => el('button', { class: 'chip', type: 'button', 'aria-pressed': String(isOn(key)), onclick: () => { onPick(key); save(); drawPanel(); draw(); } }, text))));
+  const toggleIn = (arr, key) => { const i = arr.indexOf(key); if (i >= 0) arr.splice(i, 1); else arr.push(key); };
+  const panel = el('div', { class: 'filters hidden' });
+  const drawPanel = () => {
+    const fams = Array.from(new Map(vehicles.map((v) => [v.family, v.familyLabel])).entries()).filter(([k]) => k);
+    const sites = Array.from(new Set(vehicles.map((v) => v.siteLabel))).filter(Boolean);
+    panel.replaceChildren(
+      chipRow('Trier', SORTS, (k) => f.sort === k, (k) => { f.sort = k; }),
+      fams.length > 1 ? chipRow('Famille', fams, (k) => f.families.includes(k), (k) => toggleIn(f.families, k)) : null,
+      sites.length > 1 ? chipRow('Site', sites.map((x) => [x, x]), (k) => f.sites.includes(k), (k) => toggleIn(f.sites, k)) : null,
+      chipRow('Prix', PRICES, (k) => f.price === k, (k) => { f.price = k; }),
+      chipRow('Distance', DISTS, (k) => f.dist === k, (k) => { f.dist = k; }),
+      el('div', { class: 'row between' }, count, activeFilterCount(f) ? el('button', { class: 'btn quiet small', type: 'button', onclick: () => { Object.assign(f, { ...FILTER_DEFAULTS, families: [], sites: [] }); save(); drawPanel(); draw(); } }, 'Tout réinitialiser') : null),
+    );
+  };
+  const btn = el('button', { class: 'btn', type: 'button', 'aria-expanded': 'false', onclick: () => { const open = panel.classList.toggle('hidden'); btn.setAttribute('aria-expanded', String(!open)); prefs.set('filters_open', open ? '0' : '1'); } });
+  const input = el('input', { class: 'input', type: 'search', placeholder: 'Rechercher : modèle, marque, ville…', value: state.search, 'aria-label': 'Rechercher dans la liste', oninput: (e) => { state.search = e.target.value; draw(); } });
+  const bar = el('div', { class: 'toolbar' }, vehicles.length >= 4 ? el('div', { class: 'searchbox' }, svg('search'), input) : null, btn);
+  if (prefs.get('filters_open') === '1' || activeFilterCount(f)) { panel.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true'); }
+  drawPanel(); draw();
+  return el('div', { class: 'tools' }, bar, panel);
 }
 
 const MAIN_SITES = ['leboncoin', 'lacentrale', 'autoscout24', 'paruvendu'];
@@ -294,7 +358,7 @@ function messageBlock(ta) {
 
 function vehicleBadges(v) {
   const badges = [];
-  const fresh = Date.now() - new Date(v.firstSeenAt).getTime() < 86400_000;
+  const fresh = Date.now() - new Date(whenDate(v)).getTime() < 86400_000;
   if (v.status === 'nouveau' && v.matched && fresh) badges.push(el('span', { class: 'badge new' }, 'Nouveau'));
   if (v.priceDropped) badges.push(el('span', { class: 'badge ok' }, 'Prix baissé'));
   if (v.reposted) badges.push(el('span', { class: 'badge' }, 'Republiée'));
@@ -314,6 +378,9 @@ function followUpText(v) {
 }
 
 const whereText = (v) => [v.city, v.distanceKm !== null ? `à ${v.distanceKm} km` : null].filter(Boolean).join(', ');
+/** The date shown is the site's publication date; the arrival in the app only when the site gave none. */
+const whenText = (v) => (v.publishedAt ? `publiée ${fmt.ago(v.publishedAt)}` : `reçue ${fmt.ago(v.firstSeenAt)}`);
+const whenDate = (v) => v.publishedAt || v.firstSeenAt;
 
 function specsBlock(v) {
   return el('div', { class: 'specs' },
@@ -423,7 +490,7 @@ function renderVehicle(v) {
 
   const follow = followUpText(v);
   append(card,
-    el('div', { class: 'head' }, link(thumb), el('div', { class: 'title' }, el('h3', { title: v.title }, link(v.name)), el('span', { class: 'sub' }, v.title !== v.name ? v.title : ''), el('span', { class: 'sub' }, [whereText(v), v.siteLabel, fmt.ago(v.firstSeenAt)].filter(Boolean).join(' · ')))),
+    el('div', { class: 'head' }, link(thumb), el('div', { class: 'title' }, el('h3', { title: v.title }, link(v.name)), el('span', { class: 'sub' }, v.title !== v.name ? v.title : ''), el('span', { class: 'sub' }, [whereText(v), v.siteLabel, whenText(v)].filter(Boolean).join(' · ')))),
     specsBlock(v),
     badges.length ? el('div', { class: 'badges' }, badges) : null,
     follow ? el('p', { class: 'follow' }, follow) : null,
@@ -443,7 +510,7 @@ function vehicleSheet(v, { afterUpdate, inBurst = false }) {
   const ta = messageTextarea(v);
   const { actions, primary, showConfirm } = vehicleActions(v, ta, { afterUpdate, inBurst });
   if (primary && !inBurst) primary.classList.add('sticky');
-  const siteLine = el('div', { class: 'sub' }, [whereText(v), `${v.siteLabel} · ${fmt.ago(v.firstSeenAt)}`].filter(Boolean).join(' · '));
+  const siteLine = el('div', { class: 'sub' }, [whereText(v), `${v.siteLabel} · ${whenText(v)}`].filter(Boolean).join(' · '));
   const others = v.listings.length > 1 ? el('div', { class: 'others' }, 'Aussi sur ', v.listings.slice(1).map((l, i) => [i ? ', ' : '', el('a', { href: l.url, target: '_blank', rel: 'noopener' }, l.siteLabel)])) : null;
   const desc = v.description ? el('details', { class: 'adv desc', open: !inBurst }, el('summary', {}, 'Texte de l’annonce tel que reçu'), el('p', { class: 'desc-text' }, v.description)) : null;
 
@@ -637,6 +704,20 @@ async function renderReglages() {
       return box;
     }));
 
+  // Affichage : clair, sombre, ou comme le téléphone. Un choix par appareil.
+  const themeNow = () => prefs.get('theme') || 'auto';
+  const applyTheme = (t) => {
+    if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
+    prefs.set('theme', t);
+    const dark = t === 'dark' || (t === 'auto' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+    const meta = document.querySelector('meta[name=theme-color]'); if (meta) meta.content = dark ? '#15171A' : '#F5F4F0';
+  };
+  const seg = el('div', { class: 'segmented', role: 'group', 'aria-label': 'Thème' });
+  const drawSeg = () => seg.replaceChildren(...[['auto', 'Comme l’appareil'], ['light', 'Clair'], ['dark', 'Sombre']].map(([k, label]) => el('button', { type: 'button', 'aria-pressed': String(themeNow() === k), onclick: () => { applyTheme(k); drawSeg(); } }, label)));
+  drawSeg();
+  const display = el('section', { class: 'card section' }, el('h2', {}, 'Affichage'),
+    el('div', { class: 'field' }, el('label', {}, 'Thème'), seg, el('span', { class: 'help' }, 'Le mode sombre repose les yeux le soir. Réglage propre à cet appareil.')));
+
   // Notifications
   const notif = el('section', { class: 'card section' }, el('h2', {}, 'Notifications'),
     toggle(d.notifications, 'push', 'Notification à chaque nouvelle annonce', 'Sur le téléphone ou l’ordinateur où l’application est ouverte ou installée.'),
@@ -661,7 +742,7 @@ async function renderReglages() {
   } }, 'Enregistrer');
   const savebar = el('div', { class: 'savebar' }, el('div', { class: 'count', id: 'preview-count' }, previewText()), saveBtn);
 
-  return [el('div', { class: 'headline' }, el('h1', {}, 'Réglages'), el('p', { class: 'muted' }, 'Le compteur en bas se met à jour à chaque changement, avant même d’enregistrer.')), dealer, zone, families, notif, savebar];
+  return [el('div', { class: 'headline' }, el('h1', {}, 'Réglages'), el('p', { class: 'muted' }, 'Le compteur en bas se met à jour à chaque changement, avant même d’enregistrer.')), dealer, zone, families, notif, display, savebar];
 }
 
 // ---------- notifications push ----------
