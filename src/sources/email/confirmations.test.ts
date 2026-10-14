@@ -67,7 +67,9 @@ describe('alert width', () => {
     const settings = defaultSettings();
     settings.zone.radiusKm = 100; settings.maxKm = 100000;
     expect(alertBounds(settings)).toEqual({ radiusKm: 150, maxKm: 150000 });
-    expect(alertAdvice({ site: 'paruvendu', criteria: '', confirmedAt: '', radiusKm: 100, maxKm: 100000 }, settings)).toMatch(/150 km de rayon, 150 000 km au compteur/);
+    expect(alertAdvice({ site: 'lacentrale', criteria: '', confirmedAt: '', radiusKm: 100, maxKm: 100000 }, settings)).toMatch(/150 km de rayon, 150 000 km au compteur/);
+    // ParuVendu stops at 100 km: only the mileage can be widened there.
+    expect(alertAdvice({ site: 'paruvendu', criteria: '', confirmedAt: '', radiusKm: 100, maxKm: 100000 }, settings)).toMatch(/\(150 000 km au compteur\)/);
     expect(alertAdvice({ site: 'paruvendu', criteria: '', confirmedAt: '', radiusKm: 200, maxKm: 150000 }, settings)).toBeUndefined();
     expect(alertAdvice({ site: 'autoscout24', criteria: '', confirmedAt: '' }, settings)).toBeUndefined();
   });
