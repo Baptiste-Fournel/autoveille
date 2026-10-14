@@ -16,6 +16,7 @@ git config --global --add safe.directory /opt/autoveille >/dev/null 2>&1 || true
 DB=/opt/autoveille/data/autoveille.sqlite
 if [ -f "$DB" ]; then
   mkdir -p /opt/autoveille/data/backups
+  chown autoveille:autoveille /opt/autoveille/data/backups
   STAMP=$(date +%Y%m%d-%H%M)
   # Copie cohérente même pendant que le service tourne (API de sauvegarde SQLite, pas un simple cp).
   sudo -u autoveille node -e "
