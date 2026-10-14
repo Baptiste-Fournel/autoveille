@@ -3,7 +3,7 @@
 set -euo pipefail
 cd /opt/autoveille
 git pull -q
-npm ci --no-audit --no-fund >/dev/null
+npm ci --ignore-scripts --no-audit --no-fund >/dev/null
 npm run build >/dev/null
 npm prune --omit=dev --no-audit --no-fund >/dev/null
 chown -R autoveille:autoveille /opt/autoveille

@@ -58,7 +58,7 @@ elif [ ! -f "$APP_DIR/package.json" ]; then
   mkdir -p "$APP_DIR"; cp -r "$SRC"/. "$APP_DIR"/
 fi
 cd "$APP_DIR"
-npm ci --no-audit --no-fund >/dev/null
+npm ci --ignore-scripts --no-audit --no-fund >/dev/null
 npm run build >/dev/null
 npm prune --omit=dev --no-audit --no-fund >/dev/null
 mkdir -p "$APP_DIR/data"
