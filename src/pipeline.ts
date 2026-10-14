@@ -153,14 +153,16 @@ export class Pipeline {
         price: v.price ?? undefined, km: v.km ?? undefined, year: v.year ?? undefined, city: v.city ?? undefined, postalCode: v.postal_code ?? undefined,
         sellerType: first.seller_type,
       };
-      const info: VehicleInfo = { make: v.make ?? undefined, model: v.model ?? undefined, family: v.family, year: v.year ?? undefined, km: v.km ?? undefined, price: v.price ?? undefined };
+      // The brand is read again from the title: brands added to a family (or to the app) apply to known vehicles too.
+      const fresh = extractVehicleInfo(raw, customBrands(settings));
+      const info: VehicleInfo = { make: fresh.make ?? v.make ?? undefined, model: fresh.model ?? v.model ?? undefined, family: fresh.make ? fresh.family : v.family, year: v.year ?? undefined, km: v.km ?? undefined, price: v.price ?? undefined };
       let distance = v.distance_km;
       if (v.lat !== null && v.lon !== null && settings.zone.lat !== null && settings.zone.lon !== null) {
         distance = haversineKm({ lat: settings.zone.lat, lon: settings.zone.lon }, { lat: v.lat, lon: v.lon });
       }
       const verdict = evaluate(raw, info, settings, { distanceKm: distance });
       if (verdict.pass) pass++;
-      if (persist) this.store.updateVehicle(v.id, { matched: verdict.pass ? 1 : 0, reasons: JSON.stringify(verdict.reasons), distance_km: distance });
+      if (persist) this.store.updateVehicle(v.id, { matched: verdict.pass ? 1 : 0, reasons: JSON.stringify(verdict.reasons), distance_km: distance, make: info.make ?? null, model: info.model ?? null, family: info.family });
     }
     return { total: vehicles.length, pass };
   }
