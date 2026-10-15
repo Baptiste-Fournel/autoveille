@@ -211,8 +211,9 @@ export class Pipeline {
       // Each listing's own identity; the first listing anchors the vehicle, the others stay only when they agree.
       const keyed = listings.map((l) => { const raw = rawOf(l, v); const info = extractVehicleInfo(raw, brands); return { l, raw, info, fp: fingerprint(info, raw) }; });
       const anchor = keyed[0];
+      if (!anchor) continue;
       const stay = [anchor];
-      const groups: Array<typeof keyed> = [];
+      const groups: Array<[(typeof keyed)[number], ...typeof keyed]> = [];
       for (const k of keyed.slice(1)) {
         if (k.fp === anchor.fp && similar({ km: k.l.km ?? v.km, price: k.l.price ?? v.price }, { km: anchor.l.km ?? v.km, price: anchor.l.price ?? v.price })) { stay.push(k); continue; }
         const g = groups.find((x) => x[0].fp === k.fp && similar({ km: k.l.km, price: k.l.price }, { km: x[0].l.km, price: x[0].l.price }));

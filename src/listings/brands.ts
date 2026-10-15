@@ -148,7 +148,7 @@ export function detectBrand(title: string, extra: CustomBrand[] = []): BrandMatc
   let best: { def: BrandDef; index: number; end: number } | undefined;
   for (const { pattern, def } of [...customIndex(extra), ...ALIAS_INDEX]) {
     const m = pattern.exec(title);
-    if (!m) continue;
+    if (!m || m[1] === undefined) continue;
     const start = m.index + m[1].length;
     const end = start + m[0].length - m[1].length;
     if (!best || start < best.index || (start === best.index && end > best.end)) {

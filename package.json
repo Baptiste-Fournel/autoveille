@@ -3,12 +3,18 @@
   "version": "1.0.0",
   "description": "Veille d'annonces automobiles avec messages personnalisés prêts à envoyer",
   "main": "index.js",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
   "scripts": {
-    "test": "vitest run",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "test:e2e": "node -e \"console.error('Aucun parcours Playwright pour l’instant : npm run test:e2e arrive en phase 5.'); process.exit(1)\"",
+    "verify": "npm run check && npm run lint && npm run test",
     "parse-email": "tsx src/cli/parse-email.ts",
     "demo": "tsx src/cli/demo.ts"
   },
@@ -26,12 +32,14 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@types/better-sqlite3": "^9.6.0",
     "@types/mailparser": "^3.9.0",
     "@types/node": "^26.6.5",
     "@types/web-push": "^3.6.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
+    "vite": "8.3.4",
     "vitest": "^5.0.4"
   },
   "type": "module"

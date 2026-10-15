@@ -23,7 +23,7 @@ export function parsePrice(text: string): number | undefined {
   let best: number | undefined;
   let m: RegExpExecArray | null;
   while ((m = after.exec(t))) {
-    const n = toInt(m[1]);
+    const n = toInt(m[1] ?? '');
     if (plausible(n) && (best === undefined || n > best)) best = n;
   }
   if (best !== undefined) return best;
@@ -31,14 +31,14 @@ export function parsePrice(text: string): number | undefined {
   // greedy match swallows them: the groups before the km belong to the kilometres, not the price.
   const before = /(?:€|\beur\b|\beuros?\b)\s?(\d{1,3}(?:[ .]\d{3})*|\d{3,7})(?![\d])(\s?km\b)?/giu;
   while ((m = before.exec(t))) {
-    let groups = m[1].split(/[ .]/);
+    let groups = (m[1] ?? '').split(/[ .]/);
     if (m[2] && groups.length >= 2) groups = groups.slice(0, groups.length >= 3 ? -2 : -1);
     const n = Number(groups.join(''));
     if (plausible(n) && (best === undefined || n > best)) best = n;
   }
   if (best !== undefined) return best;
   const labelled = /prix\s*:?\s*(\d{1,3}(?:[ .]\d{3})+|\d{3,7})(?![\d])/iu.exec(t);
-  return labelled ? toInt(labelled[1]) : undefined;
+  return labelled ? toInt(labelled[1] ?? '') : undefined;
 }
 
 /** "42 000 km", "42000km", "42.000 KM", "42 000 kms" */
@@ -47,11 +47,11 @@ export function parseKm(text: string): number | undefined {
   const re = /(?<![\d,.\p{L}])(\d{1,3}(?:[ .]\d{3})+|\d{1,7})\s?kms?\b/giu;
   let m: RegExpExecArray | null;
   while ((m = re.exec(t))) {
-    const n = toInt(m[1]);
+    const n = toInt(m[1] ?? '');
     // Reject "12 km" distance mentions and absurd values.
     if (n >= 100 && n <= 2_000_000) return n;
     // "€ 2 000 100 000 km": a price glued to the kilometres. The km are the last groups.
-    const groups = m[1].split(/[ .]/);
+    const groups = (m[1] ?? '').split(/[ .]/);
     for (const k of [2, 1]) {
       if (groups.length <= k) continue;
       const tail = Number(groups.slice(-k).join(''));
@@ -92,8 +92,8 @@ function isCityToken(tok: string): boolean {
 }
 
 function trimConnectors(words: string[]): string[] {
-  while (words.length && LOC_CONNECTOR.has(words[0].toLowerCase())) words.shift();
-  while (words.length && LOC_CONNECTOR.has(words[words.length - 1].toLowerCase())) words.pop();
+  while (words.length && LOC_CONNECTOR.has((words[0] ?? '').toLowerCase())) words.shift();
+  while (words.length && LOC_CONNECTOR.has((words[words.length - 1] ?? '').toLowerCase())) words.pop();
   return words;
 }
 
@@ -103,18 +103,18 @@ export function parseLocation(text: string): { city?: string; postalCode?: strin
   const tokens = t.split(' ').filter(Boolean);
   const isPostal = (tok: string) => /^\d{5}$/.test(tok);
   for (let i = 0; i < tokens.length; i++) {
-    if (!isPostal(tokens[i])) continue;
+    if (!isPostal(tokens[i] ?? '')) continue;
     // Preceded by "City" (possibly "City -")
     const before: string[] = [];
     for (let j = i - 1, n = 0; j >= 0 && n < 4; j--) {
-      const tok = tokens[j].replace(/[,;:(]+$/, '');
+      const tok = (tokens[j] ?? '').replace(/[,;:(]+$/, '');
       if (tok === '-' || tok === '–' || tok === '') { if (before.length) break; else continue; }
       if (!isCityToken(tok)) break;
       before.unshift(tok); n++;
     }
     const after: string[] = [];
     for (let j = i + 1, n = 0; j < tokens.length && n < 4; j++) {
-      const tok = tokens[j].replace(/^[,;:(-]+|[,;:).]+$/g, '');
+      const tok = (tokens[j] ?? '').replace(/^[,;:(-]+|[,;:).]+$/g, '');
       if (!tok) continue;
       if (!isCityToken(tok)) break;
       after.push(tok); n++;
@@ -126,7 +126,7 @@ export function parseLocation(text: string): { city?: string; postalCode?: strin
   }
   const m = /([\p{L}][\p{L}'’ -]{1,40}?)\s*\((\d{2})\)/u.exec(t);
   if (m) {
-    const words = trimConnectors(m[1].trim().split(' ').filter(isCityToken).slice(-4));
+    const words = trimConnectors((m[1] ?? '').trim().split(' ').filter(isCityToken).slice(-4));
     if (words.length) return { postalCode: `${m[2]}000`, city: titleCase(words.join(' ')) };
   }
   return {};
@@ -158,7 +158,7 @@ export function extractModel(title: string, modelStart: number): string | undefi
   for (const tok of tokens) {
     if (out.length >= 3) break;
     // "Ranger RANGER DOUBLE CABINE": a token repeated right after itself is noise.
-    if (out.length && tok.localeCompare(out[out.length - 1], 'fr', { sensitivity: 'base' }) === 0) continue;
+    if (out.length && tok.localeCompare(out[out.length - 1] ?? '', 'fr', { sensitivity: 'base' }) === 0) continue;
     // stop at a spec token: "3.0", "450ch", "PDK", "BVA", "2015", "42000km", "diesel"
     // ("Série 3", "DS 5", "Golf 7": a small number right after the first word is part of the name)
     if (/^\d+([.,]\d+)?[lL]?$/.test(tok) && out.length > 0 && !/^\d{3,4}$/.test(tok) && !(out.length === 1 && /^\d{1,2}$/.test(tok))) break;

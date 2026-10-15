@@ -17,7 +17,7 @@ export function robotsAllows(robotsTxt: string, path: string, agent = 'autoveill
     const line = raw.replace(/#.*$/, '').trim();
     if (!line) continue;
     const m = /^([a-z-]+)\s*:\s*(.*)$/i.exec(line);
-    if (!m) continue;
+    if (!m || m[1] === undefined || m[2] === undefined) continue;
     const key = m[1].toLowerCase(), value = m[2].trim();
     if (key === 'user-agent') {
       if (!current || !lastWasAgent) { current = { agents: [], rules: [] }; groups.push(current); }

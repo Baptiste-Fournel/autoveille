@@ -3,7 +3,7 @@ import type { Pipeline } from './pipeline.js';
 import type { RawListing } from './types.js';
 
 /** A handful of realistic listings so the screens are not empty the first time (DEMO=1 or `npm run demo`). */
-export const DEMO_LISTINGS: RawListing[] = [
+export const DEMO_LISTINGS: [RawListing, RawListing, ...RawListing[]] = [
   { site: 'leboncoin', siteLabel: 'Leboncoin', externalId: '2811001234', url: 'https://www.leboncoin.fr/ad/voitures/2811001234', title: 'Porsche 911 Carrera 4S 3.0 450ch PDK', price: 112900, km: 42000, year: 2017, city: 'Mérignac', postalCode: '33700', sellerType: 'particulier' },
   { site: 'lacentrale', siteLabel: 'La Centrale', externalId: '69112345678', url: 'https://www.lacentrale.fr/auto-occasion-annonce-69112345678.html', title: 'Mercedes-AMG C63 S Coupé', price: 64900, km: 45200, year: 2019, city: 'Libourne', postalCode: '33500', sellerType: 'particulier' },
   { site: 'paruvendu', siteLabel: 'ParuVendu', externalId: 'ABCDEF123456', url: 'https://www.paruvendu.fr/a/voiture-occasion/ferrari/360/ABCDEF123456', title: 'Ferrari 360 Modena F1', price: 79000, km: 45000, year: 2001, city: 'Langon', postalCode: '33210', sellerType: 'particulier' },

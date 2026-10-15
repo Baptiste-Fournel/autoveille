@@ -1,5 +1,4 @@
 import type { Family, RawListing, Settings, VehicleInfo } from '../types.js';
-import { fmtInt as fmt } from '../listings/normalize.js';
 
 export interface MessageVars {
   marque: string;
@@ -91,7 +90,7 @@ export function pickVariant(family: Family, settings: Settings, seed: string): s
   if (!variants.length) return '';
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return variants[h % variants.length];
+  return variants[h % variants.length] ?? '';
 }
 
 export function composeMessage(raw: RawListing, info: VehicleInfo, settings: Settings, seed: string, distanceKm?: number | null): string {

@@ -1,42 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { announcedCount, classifyEmail, parseAlertEmail } from './parse.js';
 import { listingRef, unwrapTrackingUrl } from '../sites.js';
+import { loadFixture } from '../../../tests/support/fixtures.js';
 
-const LBC_HTML = `
-<html><body>
-<table><tr><td><a href="https://www.leboncoin.fr/recherches/123"><img src="https://img.leboncoin.fr/logo.png" width="120"></a></td></tr></table>
-<p>3 nouvelles annonces correspondent à votre recherche « Porsche Gironde »</p>
-<table>
-  <tr>
-    <td><a href="https://www.leboncoin.fr/ad/voitures/2811001234?utm_source=alert"><img src="https://img.leboncoin.fr/api/v1/lbcpb1/images/abc.jpg" width="200" alt="Porsche 911"></a></td>
-    <td>
-      <a href="https://www.leboncoin.fr/ad/voitures/2811001234?utm_source=alert"><b>Porsche 911 Carrera 4S 3.0 450ch PDK</b></a><br>
-      <span>89 900 €</span><br>
-      <span>2017 · 42 000 km · Essence · Automatique</span><br>
-      <span>Mérignac 33700</span> <span>Particulier</span><br>
-      <a href="https://www.leboncoin.fr/ad/voitures/2811001234?utm_source=alert">Voir l'annonce</a>
-    </td>
-  </tr>
-  <tr>
-    <td><a href="https://www.leboncoin.fr/ad/voitures/2811005678"><img src="https://img.leboncoin.fr/api/v1/lbcpb1/images/def.jpg" width="200"></a></td>
-    <td>
-      <a href="https://www.leboncoin.fr/ad/voitures/2811005678"><b>Audi RS6 Avant 4.0 TFSI 600ch</b></a><br>
-      <span>112 000 €</span><br>
-      <span>2020 · 38 500 km · Essence</span><br>
-      <span>Bordeaux 33000</span> <span>Pro</span>
-    </td>
-  </tr>
-  <tr>
-    <td></td>
-    <td>
-      <a href="https://www.leboncoin.fr/ad/voitures/2811009999">BMW M3 E46 3.2 343ch</a><br>
-      <span>Année : 2004</span> <span>Kilométrage : 128 000 km</span> <span>Prix : 34 500 €</span><br>
-      <span>Pessac (33)</span>
-    </td>
-  </tr>
-</table>
-<p><a href="https://www.leboncoin.fr/compte/alertes/unsubscribe?id=1">Se désabonner</a></p>
-</body></html>`;
+const LBC_HTML = loadFixture('emails/leboncoin/trois-annonces-en-tableau.html');
 
 describe('alert email parsing', () => {
   it('extracts one listing per ad block from a table layout', () => {
@@ -53,8 +20,7 @@ describe('alert email parsing', () => {
   });
 
   it('keeps tracking links that cannot be unwrapped as pending, and uses them once resolved', () => {
-    const html = `<div><a href="https://click.mail.lacentrale.fr/r/abc123?x=1">Mercedes-AMG C63 S Coupé</a><br>
-      <span>2019</span> <span>45 200 km</span> <span>64 900 €</span><br><span>Libourne (33)</span></div>`;
+    const html = loadFixture('emails/lacentrale/annonce-derriere-un-lien-de-suivi.html');
     const first = parseAlertEmail({ html, from: 'alertes@info.lacentrale.fr' });
     expect(first.listings).toHaveLength(0);
     expect(first.pending).toEqual([{ href: 'https://click.mail.lacentrale.fr/r/abc123?x=1', text: 'Mercedes-AMG C63 S Coupé' }]);
@@ -86,26 +52,14 @@ describe('alert email parsing', () => {
   });
 
   it('parses a text-only alert', () => {
-    const text = `Nouvelle annonce correspondant à votre alerte
-
-Ferrari 360 Modena F1
-2001 - 45 000 km - 79 000 €
-Langon (33)
-https://www.paruvendu.fr/a/voiture-occasion/ferrari/360/ABCDEF123456
-
-Pour ne plus recevoir ces alertes : https://www.paruvendu.fr/compte/alertes`;
+    const text = loadFixture('emails/paruvendu/une-annonce-en-texte-seul.txt');
     const out = parseAlertEmail({ text, from: 'alertes@paruvendu.fr' });
     expect(out.listings).toHaveLength(1);
     expect(out.listings[0]).toMatchObject({ site: 'paruvendu', externalId: 'ABCDEF123456', title: 'Ferrari 360 Modena F1', year: 2001, km: 45000, price: 79000, city: 'Langon' });
   });
 
   it('handles single-ad emails without swallowing the footer', () => {
-    const html = `<html><body><table><tr><td>
-      <h2><a href="https://www.leboncoin.fr/ad/voitures/2811000001">Alpine A110 Légende 252ch</a></h2>
-      <p>58 900 €</p><p>2019 · 21 000 km</p><p>Arcachon 33120</p>
-      </td></tr></table>
-      <table><tr><td><p>Vous recevez cet email car vous avez créé une alerte. Prix et disponibilité sous réserve. 1 500 € de remise sur l'assurance.</p>
-      <a href="https://www.leboncoin.fr/compte/alertes">Gérer mes alertes</a></td></tr></table></body></html>`;
+    const html = loadFixture('emails/leboncoin/une-annonce-et-un-pied-de-page-avec-un-prix.html');
     const out = parseAlertEmail({ html, from: 'alerte@leboncoin.fr' });
     expect(out.listings).toHaveLength(1);
     expect(out.listings[0]).toMatchObject({ title: 'Alpine A110 Légende 252ch', price: 58900, km: 21000, year: 2019, city: 'Arcachon' });
@@ -113,35 +67,7 @@ Pour ne plus recevoir ces alertes : https://www.paruvendu.fr/compte/alertes`;
 });
 
 /** Layout of the real AutoScout24 "saved search" email (14/10/2026): tracking links, title not linked, price written "€ 35 500". */
-const AS24_HTML = `
-<html><body>
-<p>Meilleures recommandations correspondant à ta nouvelle recherche :</p>
-<table><tr>
-  <td><div><a href="https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e1" target="_blank"><img src="https://prod.pictures.autoscout24.net/listing-images/8723275b-cdc4-4a58-811d-ae9cef84c6f3_x.jpg/289x217.jpg" alt="AutoScout24 Listing"></a></div></td>
-  <td>
-    <table><tr><td><div><p><span><strong><span>BMW Z4</span></strong></span></p></div></td></tr></table>
-    <table><tr><td><div><p>Z4 sDrive20i 197 ch BVM6</p></div></td></tr></table>
-    <table><tr><td><div><p> <span><strong>€ 35 500</strong></span></p></div></td></tr></table>
-    <table><tr><td><div><p><span>24 800 km, 10/2020</span></p></div></td></tr></table>
-    <table><tr><td><a href="https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e2">Détails</a></td></tr></table>
-  </td>
-</tr></table>
-<table><tr>
-  <td><div><a href="https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e3" target="_blank"><img src="https://prod.pictures.autoscout24.net/listing-images/47b79f2f-x.jpg/289x217.jpg" alt="AutoScout24 Listing"></a></div></td>
-  <td>
-    <table><tr><td><div><p><span><strong><span>Peugeot 108</span></strong></span></p></div></td></tr></table>
-    <table><tr><td><div><p>108 1.0 VTi 68ch BVM5 Active</p></div></td></tr></table>
-    <table><tr><td><div><p> <span><strong>€ 2 000</strong></span></p></div></td></tr></table>
-    <table><tr><td><div><p><span>100 000 km, 10/2015</span></p></div></td></tr></table>
-    <table><tr><td><a href="https://links.autoscout24.com/a/click?_t=t1&_m=m1&_e=e4">Détails</a></td></tr></table>
-  </td>
-</tr></table>
-<table><tr><td>
-  <a href="https://links.autoscout24.com/u/click?_t=t1&_m=m1&_e=e5">AutoScout24 - iOS</a>
-  <a href="https://links.autoscout24.com/u/click?_t=t1&_m=m1&_e=e6">AutoScout24 - Android</a>
-  <p>AutoScout24 France 88 ter, avenue du Général Leclerc | 92100 Boulogne-Billancourt | France</p>
-</td></tr></table>
-</body></html>`;
+const AS24_HTML = loadFixture('emails/autoscout24/recherche-sauvegardee-deux-annonces-et-liens-app-store.html');
 
 describe('AutoScout24 saved-search email', () => {
   const resolved = new Map([
@@ -171,13 +97,9 @@ describe('AutoScout24 saved-search email', () => {
 });
 
 // Real alert emails (anonymised), kept as fixtures so a layout change on a site shows up here first.
-import fs from 'node:fs';
-import path from 'node:path';
-const fixture = (name: string) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
-
 describe('ParuVendu alert email (real layout)', () => {
   it('takes the ad title, not the spec line, and reads price, km, year', () => {
-    const out = parseAlertEmail({ html: fixture('paruvendu-alerte.html'), from: 'info@paruvendu.fr', subject: '🚗 1 nouvelle annonce', date: new Date('2026-10-15T06:05:12Z') });
+    const out = parseAlertEmail({ html: loadFixture('emails/paruvendu/une-nouvelle-annonce.html'), from: 'info@paruvendu.fr', subject: '🚗 1 nouvelle annonce', date: new Date('2026-10-15T06:05:12Z') });
     expect(out.listings).toHaveLength(1);
     const l = out.listings[0];
     expect(l.site).toBe('paruvendu');
@@ -200,7 +122,7 @@ describe('La Centrale digest email (real layout)', () => {
   }
 
   it('reads the three previewed ads with price, km, seller type and département', () => {
-    const input = { html: fixture('lacentrale-alerte.html'), from: 'info@mail-alerte.lacentrale.fr', subject: '61 nouveaux véhicules correspondent à votre recherche', date: new Date('2026-10-15T06:36:59Z') };
+    const input = { html: loadFixture('emails/lacentrale/61-nouvelles-annonces-dont-3-en-apercu.html'), from: 'info@mail-alerte.lacentrale.fr', subject: '61 nouveaux véhicules correspondent à votre recherche', date: new Date('2026-10-15T06:36:59Z') };
     const first = parseAlertEmail(input);
     expect(first.listings).toHaveLength(0);
     expect(first.pending.length).toBeGreaterThan(30);
@@ -222,31 +144,20 @@ describe('La Centrale digest email (real layout)', () => {
 });
 
 describe('digests of older ads', () => {
-  const html = (img1: string, img2: string) => `<html><body><p>2 baisses de prix</p>
-  <table><tr><td><a href="https://www.lacentrale.fr/auto-occasion-annonce-69115730001.html"><img src="${img1}" width="272" height="203"></a></td>
-  <td><a href="https://www.lacentrale.fr/auto-occasion-annonce-69115730001.html">RENAULT KOLEOS</a><br>131 000 km<br>14 700 €</td></tr></table>
-  <table><tr><td><a href="https://www.lacentrale.fr/auto-occasion-annonce-69115730002.html"><img src="${img2}" width="272" height="203"></a></td>
-  <td><a href="https://www.lacentrale.fr/auto-occasion-annonce-69115730002.html">PEUGEOT 3008</a><br>80 000 km<br>18 900 €</td></tr></table>
-  </body></html>`;
   it('carries no publication date and ignores the site’s illustration used in place of a photo', () => {
-    const generic = 'https://cdn.braze.eu/appboy/communication/assets/image_assets/images/6aa3cb0f/orig';
-    const out = parseAlertEmail({ html: html(generic, generic), from: 'info@mail-alerte.lacentrale.fr', subject: '↘️ 108 baisses de prix sur votre alerte', date: new Date('2026-10-15T10:37:21Z') });
+    const out = parseAlertEmail({ html: loadFixture('emails/lacentrale/baisses-de-prix-avec-une-illustration-a-la-place-des-photos.html'), from: 'info@mail-alerte.lacentrale.fr', subject: '↘️ 108 baisses de prix sur votre alerte', date: new Date('2026-10-15T10:37:21Z') });
     expect(out.listings).toHaveLength(2);
     expect(out.listings[0]).toMatchObject({ title: 'RENAULT KOLEOS', price: 14700, km: 131000 });
     expect(out.listings.every((l) => l.publishedAt === undefined)).toBe(true);
     expect(out.listings.every((l) => l.imageUrl === undefined)).toBe(true);
   });
   it('keeps the date of a fresh-listings email and the photo of each ad', () => {
-    const fresh = parseAlertEmail({ html: html('https://pictures.lacentrale.fr/classifieds/A_STANDARD_0.jpg', 'https://pictures.lacentrale.fr/classifieds/B_STANDARD_0.jpg'), from: 'info@mail-alerte.lacentrale.fr', subject: '2 nouveaux véhicules correspondent à votre recherche', date: new Date('2026-10-15T10:37:21Z') });
+    const fresh = parseAlertEmail({ html: loadFixture('emails/lacentrale/deux-annonces-avec-une-photo-par-voiture.html'), from: 'info@mail-alerte.lacentrale.fr', subject: '2 nouveaux véhicules correspondent à votre recherche', date: new Date('2026-10-15T10:37:21Z') });
     expect(fresh.listings.map((l) => l.imageUrl)).toEqual(['https://pictures.lacentrale.fr/classifieds/A_STANDARD_0.jpg', 'https://pictures.lacentrale.fr/classifieds/B_STANDARD_0.jpg']);
     expect(fresh.listings[0].publishedAt).toBe('2026-10-15T10:37:21.000Z');
   });
   it('drops a picture shared by several ads of an unknown site', () => {
-    const shared = `<html><body>
-    <div><a href="https://www.petit-site-auto.fr/annonce/porsche-911/987654"><img src="https://www.petit-site-auto.fr/img/default.jpg" width="200"></a> <a href="https://www.petit-site-auto.fr/annonce/porsche-911/987654">Porsche 911 Carrera</a> 42 000 km 89 900 €</div>
-    <div><a href="https://www.petit-site-auto.fr/annonce/bmw-m3/987655"><img src="https://www.petit-site-auto.fr/img/default.jpg" width="200"></a> <a href="https://www.petit-site-auto.fr/annonce/bmw-m3/987655">BMW M3 Compétition</a> 18 000 km 79 000 €</div>
-    </body></html>`;
-    const out = parseAlertEmail({ html: shared, from: 'alertes@petit-site-auto.fr', subject: '2 nouvelles annonces' });
+    const out = parseAlertEmail({ html: loadFixture('emails/petit-site-auto/deux-annonces-avec-la-meme-image-par-defaut.html'), from: 'alertes@petit-site-auto.fr', subject: '2 nouvelles annonces' });
     expect(out.listings).toHaveLength(2);
     expect(out.listings.every((l) => l.imageUrl === undefined)).toBe(true);
   });

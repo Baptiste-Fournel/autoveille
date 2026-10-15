@@ -142,7 +142,8 @@ function parseHtml(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
     const blockText = cleanText(block.map((n) => textOf($, n)).join(' '));
     const title = pickTitle($, group, block, blockText);
     if (!title) continue;
-    const ref = group[0].ref;
+    const ref = group[0]?.ref;
+    if (!ref) continue;
     const loc = parseLocation(blockText);
     const dept = loc.postalCode ? undefined : parseDepartment(blockText);
     const listing: RawListing = {
@@ -181,11 +182,11 @@ function parseHtml(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
 }
 
 /** Lowest common ancestor of the ad's links (title, photo, price, button are often cousins in nested tables). */
-function commonAncestor(els: Element[]): AnyNode {
+function commonAncestor(head: AnyNode, els: Element[]): AnyNode {
   const chain = (el: AnyNode): AnyNode[] => { const out: AnyNode[] = []; for (let n: AnyNode | null = el; n; n = n.parent as AnyNode | null) out.push(n); return out; };
-  const first = chain(els[0]);
+  const first = chain(head);
   const rest = els.slice(1).map((e) => new Set(chain(e)));
-  return first.find((n) => rest.every((s) => s.has(n))) ?? els[0];
+  return first.find((n) => rest.every((s) => s.has(n))) ?? head;
 }
 
 const isInside = (node: AnyNode, el: AnyNode): boolean => { for (let p: AnyNode | null = el; p; p = p.parent as AnyNode | null) if (p === node) return true; return false; };
@@ -197,18 +198,21 @@ const isInside = (node: AnyNode, el: AnyNode): boolean => { for (let p: AnyNode 
  */
 function findBlock($: cheerio.CheerioAPI, group: Anchor[], key: string, keyOf: (el: Element) => string | undefined): AnyNode[] {
   const els = group.map((a) => a.el as AnyNode);
+  const head = els[0];
+  if (!head) return [];
   if (els.length > 1) {
-    const lca = commonAncestor(group.map((a) => a.el));
+    const lca = commonAncestor(head, group.map((a) => a.el));
     const kids = ((lca as Element).children ?? []) as AnyNode[];
     const idx = kids.map((k, i) => (els.some((e) => isInside(k, e)) ? i : -1)).filter((i) => i >= 0);
-    if (idx.length) {
-      const range = kids.slice(idx[0], idx[idx.length - 1] + 1);
+    const last = idx[idx.length - 1];
+    if (last !== undefined) {
+      const range = kids.slice(idx[0], last + 1);
       const text = range.map((n) => textOf($, n)).join(' ');
       if (PRICE_OR_KM.test(text) && text.length > 20) return range;
     }
     return [climb($, lca, key, keyOf)];
   }
-  return [climb($, els[0], key, keyOf)];
+  return [climb($, head, key, keyOf)];
 }
 
 /** The smallest container around a node that holds a price or kilometres but no link to another ad. */
@@ -243,7 +247,7 @@ const SPEC_LINE = /(\d[\d ]*\s?(€|km\b))|\bann[ée]e\s*:?\s*\d{4}\b|^\d{4}\b/i
 /** "Vendeur particulier 33": a bare département number closing the block (La Centrale). */
 function parseDepartment(text: string): { city: string; postalCode: string } | undefined {
   const m = /(?:vendeur\s+(?:particulier|professionnel|pro)\s+|\s)(0[1-9]|[1-8]\d|9[0-5])\s*$/i.exec(cleanText(text));
-  if (!m) return undefined;
+  if (!m || m[1] === undefined) return undefined;
   const name = DEPARTMENTS[m[1]];
   return name ? { city: `${name} (${m[1]})`, postalCode: m[1] } : undefined;
 }
@@ -265,10 +269,10 @@ function pickTitle($: cheerio.CheerioAPI, group: Anchor[], block: AnyNode[], blo
   const candidates = group.map((a) => a.text).filter((t) => t.length >= 6 && !CALL_TO_ACTION.test(t) && !/^https?:/i.test(t));
   // Titles first; the longest of them wins ("Porsche 911 Carrera S" over "Porsche"). Spec lines only as a last resort.
   const texts = candidates.filter((t) => !SPEC_LINE.test(t));
-  if (texts.length) return cleanTitle(texts.sort((a, b) => b.length - a.length)[0]);
-  if (candidates.length) return cleanTitle(candidates.sort((a, b) => b.length - a.length)[0]);
+  if (texts.length) return cleanTitle(texts.sort((a, b) => b.length - a.length)[0] ?? '');
+  if (candidates.length) return cleanTitle(candidates.sort((a, b) => b.length - a.length)[0] ?? '');
   const headingEl = $(block).find('h1,h2,h3,h4,strong,b').first();
-  const heading = headingEl.length ? textOf($, headingEl[0]) : '';
+  const heading = headingEl[0] ? textOf($, headingEl[0]) : '';
   if (heading.length >= 6 && !CALL_TO_ACTION.test(heading)) return cleanTitle(heading);
   const alt = group.map((a) => cleanText($(a.el).find('img').attr('alt') ?? '')).find((t) => t.length >= 6);
   if (alt) return cleanTitle(alt);
@@ -341,7 +345,7 @@ function parseText(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
     const blockText = around.join(' | ');
     let title: string | undefined;
     for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
-      const l = cleanText(lines[j]);
+      const l = cleanText(lines[j] ?? '');
       if (!l || /^https?:/.test(l) || l.length < 6 || CALL_TO_ACTION.test(l) || PRICE_OR_KM.test(l)) continue;
       if (/^\d{4}\b/.test(l) || (parseLocation(l).city && l.split(' ').length <= 4)) continue;
       title = l; break;

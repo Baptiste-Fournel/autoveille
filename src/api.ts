@@ -90,7 +90,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
       // Wide alerts on the sites mean many refusals: they are grouped by reason so a good deal is quick to spot.
       const all = store.listVehicles({ onlyMatched: false, sinceDays: days ?? 14, limit: 3000 }).filter((v) => !v.matched);
       const kindsOf = (v: VehicleRow) => new Set((JSON.parse(v.reasons || '[]') as string[]).map(reasonKind));
-      const counts: Record<string, number> = { tous: all.length, suivies: 0, loin: 0, km: 0, special: 0, pro: 0, marque: 0 };
+      const counts: { suivies: number; [kind: string]: number } = { tous: all.length, suivies: 0, loin: 0, km: 0, special: 0, pro: 0, marque: 0 };
       const cache = new Map<number, Set<string>>();
       for (const v of all) { const k = kindsOf(v); cache.set(v.id, k); if (!k.has('marque')) counts.suivies++; for (const x of k) counts[x] = (counts[x] ?? 0) + 1; }
       const kind = req.query.kind || 'suivies';

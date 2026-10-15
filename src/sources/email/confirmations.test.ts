@@ -1,22 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { alertMismatch, detectAlertConfirmation } from './confirmations.js';
 import { defaultSettings } from '../../listings/defaults.js';
+import { loadFixture } from '../../../tests/support/fixtures.js';
 
 // Texts as the sites' confirmation emails render them (14/10/2026), reduced to what matters.
-const LACENTRALE = `<html><body><p>Votre alerte est confirmée, vous serez informé des nouveautés !</p><h1>Votre alerte est activée</h1>
-<p>Votre recherche de véhicule est enregistrée. Gérez vos alertes, quand vous le souhaitez, en vous connectant à <a href="https://clicks.mail-alerte.lacentrale.fr/f/a/abc">votre compte</a>.</p>
-<table><tr><td>Recherche</td></tr><tr><td>Kilométrage</td><td>... 100000 km</td></tr><tr><td>Localisation</td><td>33000 (rayon de 1...</td></tr><tr><td>Type de vendeur</td><td>Particulier</td></tr></table>
-<p>Pourquoi choisir la centrale ?</p></body></html>`;
+const LACENTRALE = loadFixture('emails/lacentrale/confirmation-de-creation-d-alerte.html');
 
-const PARUVENDU = `<html><body><p>Bonjour Prénom,</p><p>Nous vous confirmons l'enregistrement de votre alerte mail.</p>
-<p>Nom de la recherche : Voiture d'occasion sur un rayon de 100 km / kilométrage maxi : 100000.</p>
-<p>Vos critères de recherche : <span>Voiture d'occasion</span> <span>Bordeaux (33000)</span> <span>Rayon de 100 km</span> <span>Jusqu'à 100 000 km</span></p>
-<a href="https://www.paruvendu.fr/auto-moto/annonceautofo/alerte/liste?idAlerte=8529668&ticket=x">» Voir les annonces</a>
-<a href="https://www.paruvendu.fr/utilisateurparticulierfo/default/creationRecherche?idAlerte=8529668&ticket=x">» Modifier votre alerte</a>
-<p>Si vous souhaitez suspendre l'envoi des nouvelles annonces par mail, <a href="https://www.paruvendu.fr/x/suppressionAlerteDepuisMail?id=1">cliquez ici</a></p></body></html>`;
+const PARUVENDU = loadFixture('emails/paruvendu/confirmation-de-creation-d-alerte.html');
 
-const AUTOSCOUT = `<html><body><p>De nouvelles offres sont en route !</p><p>Ta recherche Profil de recherche 14/10/2026 a été enregistrée. Reçois à partir de maintenant par e-mail les nouvelles offres correspondant à cette recherche.</p>
-<a href="https://links.autoscout24.com/a/click?x=1">Voir les nouvelles annonces</a></body></html>`;
+const AUTOSCOUT = loadFixture('emails/autoscout24/confirmation-de-recherche-sauvegardee.html');
 
 describe('alert confirmation emails', () => {
   it('reads La Centrale: km, postal code, seller type, and the page to manage the alert', () => {
@@ -41,9 +33,9 @@ describe('alert confirmation emails', () => {
   });
 
   it('ignores the other emails of the same senders', () => {
-    expect(detectAlertConfirmation({ from: 'no-reply@info1.lacentrale.fr', subject: 'Confirmation de votre inscription', html: '<p>Votre compte La Centrale a bien été créé.</p>' })).toBeUndefined();
-    expect(detectAlertConfirmation({ from: 'info@paruvendu.fr', subject: 'Création de votre alerte sur ParuVendu.fr', html: '<p>Merci de confirmer votre compte et d\'initialiser un mot de passe</p>' })).toBeUndefined();
-    expect(detectAlertConfirmation({ from: 'updates@info.autoscout24.com', subject: 'Tu y es presque – confirme ton e-mail', html: '<p>Confirme ton e-mail</p>' })).toBeUndefined();
+    expect(detectAlertConfirmation({ from: 'no-reply@info1.lacentrale.fr', subject: 'Confirmation de votre inscription', html: loadFixture('emails/lacentrale/creation-de-compte.html') })).toBeUndefined();
+    expect(detectAlertConfirmation({ from: 'info@paruvendu.fr', subject: 'Création de votre alerte sur ParuVendu.fr', html: loadFixture('emails/paruvendu/compte-a-confirmer-avant-l-alerte.html') })).toBeUndefined();
+    expect(detectAlertConfirmation({ from: 'updates@info.autoscout24.com', subject: 'Tu y es presque – confirme ton e-mail', html: loadFixture('emails/autoscout24/adresse-email-a-confirmer.html') })).toBeUndefined();
     expect(detectAlertConfirmation({ from: 'no-reply@accounts.google.com', subject: 'Alerte de sécurité', html: '<p>alerte</p>' })).toBeUndefined();
   });
 

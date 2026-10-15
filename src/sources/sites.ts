@@ -93,7 +93,7 @@ export function listingRef(urlStr: string, hint?: SiteDef): ListingRef | undefin
   if (own) {
     for (const re of own.listing) {
       const m = re.exec(pathAndQuery);
-      if (m) return { site: own.key, siteLabel: own.label, id: m[1], url: canonical(u) };
+      if (m) return { site: own.key, siteLabel: own.label, id: m[1] ?? '', url: canonical(u) };
     }
     return undefined;
   }
@@ -120,7 +120,7 @@ function canonical(u: URL): string {
 }
 
 export function prettyHost(host: string): string {
-  const base = host.replace(/^www\./, '').split('.')[0];
+  const base = host.replace(/^www\./, '').split('.')[0] ?? '';
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
@@ -178,7 +178,7 @@ export async function resolveRedirect(href: string, fetchImpl: typeof fetch = fe
       const body = res.status === 200 ? await res.text().catch(() => '') : '';
       const meta = /(?:url=|location(?:\.href)?\s*=\s*['"])(https?:\/\/[^'"\s>]+)/i.exec(body);
       if (meta) {
-        current = meta[1];
+        current = meta[1] ?? '';
         if (siteForHost(new URL(current).hostname)) return current;
         continue;
       }

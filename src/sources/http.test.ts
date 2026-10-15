@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { fetchSite, listingsFromJsonLd, robotsAllows } from './http.js';
+import { loadFixture } from '../../tests/support/fixtures.js';
 
 describe('robots.txt', () => {
-  const robots = `User-agent: *\nDisallow: /compte/\nDisallow: /recherche*\nAllow: /recherche/public\n\nUser-agent: badbot\nDisallow: /`;
+  const robots = loadFixture('pages/robots-groupe-general-et-robot-exclu.txt');
   it('applies the * group when no specific group matches', () => {
     expect(robotsAllows(robots, '/voiture-occasion/porsche')).toBe(true);
     expect(robotsAllows(robots, '/compte/alertes')).toBe(false);
@@ -17,10 +18,7 @@ describe('robots.txt', () => {
 
 describe('json-ld', () => {
   it('reads schema.org Car items from a results page', () => {
-    const html = `<html><head><script type="application/ld+json">${JSON.stringify({
-      '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: [
-        { '@type': 'ListItem', position: 1, item: { '@type': 'Car', name: 'Porsche 911 Carrera S', url: '/annonce/porsche-911/123456', vehicleModelDate: '2015', mileageFromOdometer: { '@type': 'QuantitativeValue', value: 42000, unitCode: 'KMT' }, offers: { '@type': 'Offer', price: '89900', priceCurrency: 'EUR', seller: { '@type': 'Person', name: 'Marc' }, areaServed: 'Mérignac 33700' }, image: 'https://cdn.example.com/a.jpg' } },
-      ] })}</script></head><body></body></html>`;
+    const html = loadFixture('pages/resultats-json-ld-une-voiture.html');
     const out = listingsFromJsonLd(html, 'https://www.example-auto.fr/recherche');
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ site: 'example-auto.fr', externalId: '123456', title: 'Porsche 911 Carrera S', year: 2015, km: 42000, price: 89900, sellerType: 'particulier', city: 'Mérignac' });
@@ -50,8 +48,7 @@ describe('fetchSite', () => {
   });
 
   it('falls back to link parsing with relative urls', async () => {
-    const page = `<html><body><div><a href="/annonce/bmw-m3/777777">BMW M3 Compétition</a><p>79 000 €</p><p>2021 - 18 000 km</p><p>Bordeaux (33)</p></div>
-      <div><a href="/annonce/ferrari-f430/888888">Ferrari F430 F1</a><p>119 000 €</p><p>2006 - 31 000 km</p><p>Pessac (33)</p></div></body></html>`;
+    const page = loadFixture('pages/resultats-liens-relatifs-sans-json-ld.html');
     const f = fake({ 'https://www.site.fr/robots.txt': { body: 'User-agent: *\nDisallow: /compte' }, 'https://www.site.fr/recherche': { body: page } });
     const r = await fetchSite('https://www.site.fr/recherche', f);
     expect(r.ok).toBe(true);

@@ -61,7 +61,7 @@ export async function buildServer(opts: { dataDir?: string; store?: Store } = {}
 
   app.addHook('onRequest', async (req, reply) => {
     if (!req.url.startsWith('/api/')) return;
-    const path = req.url.split('?')[0];
+    const path = req.url.split('?')[0] ?? '';
     if (['/api/me', '/api/login', '/api/setup'].includes(path)) return;
     // The one-off import may come from another site's page (a search page read in the browser): it carries
     // the import token in its body instead of the session cookie, and is checked by its handler.

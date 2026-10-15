@@ -1,0 +1,114 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!!**/dist",
+      "!!**/node_modules",
+      "!!**/data",
+      "!!**/coverage",
+      "!package-lock.json",
+      "!tests/fixtures/**/*.html",
+      "!tests/fixtures/**/*.eml",
+      "!tests/fixtures/**/*.txt",
+      "!tests/fixtures/**/*.sql",
+      "!tests/fixtures/**/*.json",
+      "!**/__snapshots__"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "noNonNullAssertion": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "src/api.ts",
+        "src/auth.ts",
+        "src/config.ts",
+        "src/db.ts",
+        "src/demo.ts",
+        "src/pipeline.test.ts",
+        "src/pipeline.ts",
+        "src/scheduler.ts",
+        "src/server.ts",
+        "src/types.ts",
+        "src/cli/demo.ts",
+        "src/cli/parse-email.ts",
+        "src/listings/**",
+        "src/messages/**",
+        "src/sources/**",
+        "src/geo/**",
+        "src/notify/**",
+        "public/app.js",
+        "public/sw.js",
+        "public/index.html",
+        "public/styles.css",
+        "public/icons/icon.svg"
+      ],
+      "formatter": {
+        "enabled": false
+      },
+      "assist": {
+        "enabled": false
+      },
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noSvgWithoutTitle": "off"
+          },
+          "complexity": {
+            "noImportantStyles": "off",
+            "useOptionalChain": "off"
+          },
+          "correctness": {
+            "noInnerDeclarations": "off",
+            "noUnusedFunctionParameters": "off",
+            "noUnusedVariables": "off"
+          },
+          "style": {
+            "noDescendingSpecificity": "off",
+            "noNonNullAssertion": "off",
+            "useConst": "off",
+            "useTemplate": "off"
+          },
+          "suspicious": {
+            "noAssignInExpressions": "off",
+            "noMisleadingCharacterClass": "off",
+            "useIterableCallbackReturn": "off"
+          }
+        }
+      }
+    }
+  ]
+}
