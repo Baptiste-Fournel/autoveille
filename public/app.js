@@ -547,7 +547,9 @@ function noteField(v) {
 function renderVehicle(v) {
   const card = el('article', { class: 'card listing', id: `v-${v.id}` });
   const badges = vehicleBadges(v);
-  const thumb = v.imageUrl ? el('img', { class: 'thumb', src: v.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: (e) => e.target.replaceWith(el('div', { class: 'thumb empty' }, svg('car'))) }) : el('div', { class: 'thumb empty' }, svg('car'));
+  // No photo in what the site sent (a price-drop digest, say): say so, rather than looking like a broken image.
+  const noPhoto = () => el('div', { class: 'thumb empty', title: 'Le site n’a pas transmis de photo : elle est sur l’annonce.' }, svg('car'), el('span', {}, 'photo sur le site'));
+  const thumb = v.imageUrl ? el('img', { class: 'thumb', src: v.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: (e) => e.target.replaceWith(noPhoto()) }) : noPhoto();
   const ta = messageTextarea(v);
   const { actions, primary } = vehicleActions(v, ta, { afterUpdate: () => render() });
   const link = (...children) => el('a', { class: 'plain', href: `#/annonce/${v.id}`, 'aria-label': `Voir la fiche : ${v.name}` }, ...children);
@@ -570,7 +572,7 @@ function renderVehicle(v) {
 function vehicleSheet(v, { afterUpdate, inBurst = false }) {
   const sheet = el('article', { class: 'card listing detail', id: `v-${v.id}` });
   const badges = vehicleBadges(v);
-  const photo = v.imageUrl ? el('a', { class: 'photo', href: v.url, target: '_blank', rel: 'noopener' }, el('img', { src: v.imageUrl, alt: v.title, referrerpolicy: 'no-referrer', onerror: (e) => e.target.parentElement.replaceWith(el('a', { class: 'photo empty', href: v.url, target: '_blank', rel: 'noopener', title: 'Photos sur le site' }, svg('car'), el('span', { class: 'muted small' }, 'Photos sur le site'))) })) : el('div', { class: 'photo empty' }, svg('car'));
+  const photo = v.imageUrl ? el('a', { class: 'photo', href: v.url, target: '_blank', rel: 'noopener' }, el('img', { src: v.imageUrl, alt: v.title, referrerpolicy: 'no-referrer', onerror: (e) => e.target.parentElement.replaceWith(el('a', { class: 'photo empty', href: v.url, target: '_blank', rel: 'noopener', title: 'Photos sur le site' }, svg('car'), el('span', { class: 'muted small' }, 'Photos sur le site'))) })) : el('a', { class: 'photo empty', href: v.url, target: '_blank', rel: 'noopener', title: 'Photos sur le site' }, svg('car'), el('span', { class: 'muted small' }, 'Le site n’a pas transmis de photo — voir sur l’annonce'));
   const ta = messageTextarea(v);
   const { actions, primary, showConfirm } = vehicleActions(v, ta, { afterUpdate, inBurst });
   if (primary && !inBurst) primary.classList.add('sticky');
