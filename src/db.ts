@@ -243,8 +243,11 @@ export class Store {
   }
 
   /** A site confirmed its alert by email: tick the site and keep what it said. */
+  /** Keeps what a site last said about its alert; an older confirmation (a mailbox read again) never replaces a newer one. */
   recordAlert(info: AlertInfo): void {
     const s = this.getSettings();
+    const current = s.alerts[info.site];
+    if (current?.confirmedAt && info.confirmedAt && info.confirmedAt < current.confirmedAt) return;
     s.alertsDone = { ...s.alertsDone, [info.site]: true };
     s.alerts = { ...s.alerts, [info.site]: info };
     this.saveSettings(s);
