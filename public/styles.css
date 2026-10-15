@@ -406,3 +406,7 @@ table.emails td.n .unit { display: none; }
 .note.link b { color: inherit; }
 details.adv.card { border-top: 1px solid var(--line); padding-top: 14px; }
 details.adv.card > summary { font-size: 16px; }
+
+/* A site's email that only previewed its list: the gap and the way to the rest. */
+.note.digest { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.note.digest .btn { margin: 0; }

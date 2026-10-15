@@ -941,6 +941,13 @@ async function renderSources() {
     const confirmed = a ? el('p', { class: 'small' }, el('b', {}, 'Ce que le site enverra : '), a.criteria, a.confirmedAt ? el('span', { class: 'muted' }, ` (confirmé par le site ${fmt.ago(a.confirmedAt)})`) : null) : null;
     const issues = (s.issues || []).map((m) => el('div', { class: 'note warn' }, m));
     if (!issues.length && s.advice) issues.push(el('div', { class: 'note' }, s.advice));
+    // The site's last email was a preview: the rest of the list is only on the site.
+    if (s.digest && Date.now() - new Date(s.digest.at).getTime() < 3 * 86400_000) {
+      const g = s.digest; const missing = g.announced - g.received;
+      issues.push(el('div', { class: 'note warn digest' },
+        el('div', {}, el('b', {}, `${g.announced} nouvelles annonces annoncées ${fmt.ago(g.at)}, ${g.received} ${g.received > 1 ? 'arrivées' : 'arrivée'} dans l’application.`), ` Ce site n’envoie par email qu’un aperçu : les ${missing} autres ne sont visibles que sur le site, et l’application ne peut pas aller les lire à votre place.`),
+        g.url ? el('a', { class: 'btn small', href: g.url, target: '_blank', rel: 'noopener' }, svg('open'), `Voir les ${missing} autres sur ${s.label}`) : null));
+    }
     const howTo = el('p', { class: 'small muted' }, s.prefilled ? `La recherche pré-remplie prend ${s.alertRadiusKm} km autour de ${d.zone.city || 'la ville'}, ${fmt.int(s.alertMaxKm)} km au compteur maximum, vendeurs particuliers, toutes marques : exprès plus large que vos réglages. ` : '', s.help);
     const buttons = done
       ? el('div', { class: 'row' },

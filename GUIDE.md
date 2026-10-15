@@ -60,6 +60,8 @@ Un message par famille, avec plusieurs variantes tirées au hasard pour ne pas e
 - Une voiture a été écartée à tort : onglet « Écartées par les filtres », la raison est affichée, « Garder quand même » la remet dans la file.
 - Après une mise à jour de l'application : rien n'est perdu (annonces, statuts, notes, réglages vivent sur le serveur, et une copie de la base est faite avant chaque mise à jour). Dans **Sites**, « Tout relire » relit toute la boîte mail ; les annonces connues sont complétées, pas dupliquées.
 - Les photos de certains sites (La Centrale) ne s'affichent que sur le site lui-même : l'application montre alors une icône, et la fiche propose « Photos sur le site ».
+- Un site annonce « 61 nouvelles annonces » mais l'application n'en reçoit que 3 : certains sites (La Centrale) n'envoient par email qu'un aperçu de la liste. L'onglet **Sites** le signale, avec le lien vers le reste de la liste sur le site, et une notification prévient quand l'écart est important. L'application ne peut pas aller lire ces pages à votre place (les sites s'y opposent) ; des alertes plus ciblées sur le site (par marque, avec un prix plancher) réduisent l'écart.
+- Les emails « baisses de prix », « toujours intéressé ? » ou récapitulatifs sont lus aussi : une baisse de prix met à jour l'annonce connue ; une annonce inconnue est ajoutée sans date de publication (le site ne la donne pas), avec la mention « date de publication non fournie ».
 
 ## Ce que l'application ne fait pas
 

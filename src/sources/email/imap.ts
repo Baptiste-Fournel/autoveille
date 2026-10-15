@@ -4,7 +4,7 @@ import type { Store } from '../../db.js';
 import type { Pipeline } from '../../pipeline.js';
 import { resolveRedirect } from '../sites.js';
 import { isDigestOfOlderAds, parseAlertEmail } from './parse.js';
-import { detectAlertConfirmation } from './confirmations.js';
+import { detectAlertConfirmation, siteLabel } from './confirmations.js';
 
 export interface ImapConfig { host: string; port: number; user: string; pass: string; mailbox: string }
 
@@ -64,6 +64,15 @@ export async function pollMailbox(cfg: ImapConfig, store: Store, pipeline: Pipel
 
           let matched = 0;
           const emailDate = parsed.date && !Number.isNaN(parsed.date.getTime()) ? parsed.date.toISOString() : undefined;
+          // "61 nouveaux véhicules" with 3 in the body: the site sent a preview, the rest is only on the site.
+          if (out.kind === 'new' && out.announced && out.announced > out.listings.length && out.site) {
+            const siteName = siteLabel(out.site);
+            log(`${siteName} : email tronqué, ${out.announced} annonces annoncées, ${out.listings.length} lue(s)`);
+            if (out.announced - out.listings.length >= 3) {
+              try { await pipeline.truncatedDigest({ site: out.site, siteLabel: siteName, announced: out.announced, received: out.listings.length, url: out.moreUrl, at: emailDate ?? new Date().toISOString() }); }
+              catch (err) { log(`notification résumé tronqué : ${String(err)}`); }
+            }
+          }
           for (const listing of out.listings) {
             // Alerts leave within minutes of the publication: the email's date is the best date we have —
             // except for digests of older ads (price drops, reminders), which say nothing about it.
@@ -75,7 +84,7 @@ export async function pollMailbox(cfg: ImapConfig, store: Store, pipeline: Pipel
             message_id: messageId, uid, subject, sender: from, received_at: parsed.date?.toISOString() ?? null, site: out.site ?? null,
             parsed_count: out.listings.length,
             // "61 nouveaux véhicules…" with 3 ads in the body: the site sent a digest, and the gap is worth showing.
-            parsed_json: JSON.stringify({ listings: out.listings.map((l) => ({ title: l.title, price: l.price, km: l.km, year: l.year, city: l.city, postalCode: l.postalCode, sellerType: l.sellerType, url: l.url })), pending: out.pending.length, ignored: out.ignored, announced: announcedCount(subject) }),
+            parsed_json: JSON.stringify({ listings: out.listings.map((l) => ({ title: l.title, price: l.price, km: l.km, year: l.year, city: l.city, postalCode: l.postalCode, sellerType: l.sellerType, url: l.url })), pending: out.pending.length, ignored: out.ignored, announced: out.announced, kind: out.kind, moreUrl: out.moreUrl }),
             error: null,
           });
           result.processed++;
@@ -116,8 +125,3 @@ export async function testMailbox(cfg: ImapConfig): Promise<{ messages: number }
   }
 }
 
-/** The number of ads an alert email announces in its subject ("61 nouveaux véhicules…", "3 nouvelles annonces"). */
-export function announcedCount(subject: string): number | undefined {
-  const m = /(\d{1,4})\s+nouve(?:aux?|lles?)\s+(?:annonces?|v[ée]hicules?|r[ée]sultats?|offres?)/i.exec(subject);
-  return m ? Number(m[1]) : undefined;
-}

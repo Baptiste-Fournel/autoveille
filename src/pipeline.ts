@@ -21,10 +21,14 @@ export type IngestOutcome =
   | { kind: 'repost'; vehicleId: number }
   | { kind: 'other_site'; vehicleId: number };
 
+export interface DigestGap { site: string; siteLabel: string; announced: number; received: number; url?: string; at: string }
+
 export interface Notifier {
   newVehicle(vehicle: VehicleRow, raw: RawListing, message: string): Promise<void>;
   /** A seller lowered the price of a vehicle still in play: worth a nudge. Optional. */
   priceDrop?(vehicle: VehicleRow, raw: RawListing, from: number, to: number): Promise<void>;
+  /** A site announced more ads than its email showed: the rest is only on the site. Optional. */
+  digest?(gap: DigestGap): Promise<void>;
 }
 
 export class Pipeline {
@@ -38,6 +42,11 @@ export class Pipeline {
   }
 
   setNotifier(n: Notifier): void { this.notifier = n; }
+
+  /** The site's email was a preview of a longer list: tell the person, once per email. */
+  async truncatedDigest(gap: DigestGap): Promise<void> {
+    if (this.notifier?.digest) await this.notifier.digest(gap);
+  }
 
   /** Vehicle as the UI needs it: merged info plus the message to send. */
   messageFor(vehicle: VehicleRow, settings: Settings): string {

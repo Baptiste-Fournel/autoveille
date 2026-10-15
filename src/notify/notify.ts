@@ -1,6 +1,6 @@
 import webpush from 'web-push';
 import type { Store, VehicleRow } from '../db.js';
-import type { Notifier } from '../pipeline.js';
+import type { DigestGap, Notifier } from '../pipeline.js';
 import type { RawListing } from '../types.js';
 import { fmtInt } from '../listings/normalize.js';
 
@@ -53,6 +53,21 @@ export class AppNotifier implements Notifier {
     if (settings.notifications.push && pushAvailable(this.cfg)) tasks.push(this.sendPush({ title, body, url, vehicleId: vehicle.id }));
     if (settings.notifications.telegramToken && settings.notifications.telegramChatId) {
       tasks.push(this.sendTelegram(settings.notifications.telegramToken, settings.notifications.telegramChatId, `${title}\n${body}\n${url}`));
+    }
+    await Promise.all(tasks);
+  }
+
+  async digest(gap: DigestGap): Promise<void> {
+    const settings = this.store.getSettings();
+    const missing = gap.announced - gap.received;
+    const title = `${gap.siteLabel} : ${gap.announced} nouvelles annonces`;
+    const body = `${gap.received} ${gap.received > 1 ? 'arrivées' : 'arrivée'} dans l’application, ${missing} ${missing > 1 ? 'autres sont à voir' : 'autre est à voir'} sur le site.`;
+    // The notification opens the Sites screen, where the link to the full list on the site waits.
+    const url = `${this.baseUrl()}/#/sources`;
+    const tasks: Promise<unknown>[] = [];
+    if (settings.notifications.push && pushAvailable(this.cfg)) tasks.push(this.sendPush({ title, body, url }));
+    if (settings.notifications.telegramToken && settings.notifications.telegramChatId) {
+      tasks.push(this.sendTelegram(settings.notifications.telegramToken, settings.notifications.telegramChatId, `${title}\n${body}${gap.url ? `\n${gap.url}` : ''}`));
     }
     await Promise.all(tasks);
   }

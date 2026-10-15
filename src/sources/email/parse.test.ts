@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAlertEmail } from './parse.js';
+import { announcedCount, classifyEmail, parseAlertEmail } from './parse.js';
 import { listingRef, unwrapTrackingUrl } from '../sites.js';
 
 const LBC_HTML = `
@@ -205,6 +205,10 @@ describe('La Centrale digest email (real layout)', () => {
     expect(first.listings).toHaveLength(0);
     expect(first.pending.length).toBeGreaterThan(30);
     const out = parseAlertEmail(input, resolved);
+    // A digest: 61 announced, 3 shown, and the email's own link to the rest of the list.
+    expect(out.kind).toBe('new');
+    expect(out.announced).toBe(61);
+    expect(out.moreUrl).toBe('https://www.lacentrale.fr/listing?customerFamilyCodes=PART');
     expect(out.listings.map((l) => l.title)).toEqual(['VOLKSWAGEN COCCINELLE', 'OPEL MERIVA II phase 2', 'LAND ROVER DISCOVERY SPORT']);
     expect(out.listings[0]).toMatchObject({ price: 10500, km: 92000, sellerType: 'particulier', postalCode: '33', city: 'Gironde (33)' });
     expect(out.listings[2]).toMatchObject({ price: 14500, km: 120000 });
@@ -245,5 +249,20 @@ describe('digests of older ads', () => {
     const out = parseAlertEmail({ html: shared, from: 'alertes@petit-site-auto.fr', subject: '2 nouvelles annonces' });
     expect(out.listings).toHaveLength(2);
     expect(out.listings.every((l) => l.imageUrl === undefined)).toBe(true);
+  });
+});
+
+describe('email kinds', () => {
+  it('tells fresh ads, price drops, reminders and recaps apart from the subject, on any site', () => {
+    expect(classifyEmail('61 nouveaux véhicules correspondent à votre recherche')).toBe('new');
+    expect(classifyEmail('🚗 1 nouvelle annonce - Voiture d’occasion / Bordeaux')).toBe('new');
+    expect(classifyEmail('Profil de recherche 14/10/2026 : 2 nouveaux résultats')).toBe('new');
+    expect(classifyEmail('↘️ 108 baisses de prix sur votre alerte')).toBe('price_drop');
+    expect(classifyEmail('Toujours intéressé par "Audi TT - 39900 €" ?')).toBe('reminder');
+    expect(classifyEmail('Votre récapitulatif de la semaine')).toBe('recap');
+    expect(classifyEmail('Confirmation de la création de votre alerte')).toBe('other');
+    expect(announcedCount('61 nouveaux véhicules correspondent à votre recherche')).toBe(61);
+    expect(announcedCount('🚗 1 nouvelle annonce - Voiture')).toBe(1);
+    expect(announcedCount('Toujours intéressé ?')).toBeUndefined();
   });
 });

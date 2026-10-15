@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import type { AnyNode, Element } from 'domhandler';
 import type { RawListing, SellerType } from '../../types.js';
 import { cleanText, parseKm, parseLocation, parsePrice, parseYear } from '../../listings/normalize.js';
-import { listingRef, SITES, siteForSender, unwrapTrackingUrl, type ListingRef, type SiteDef } from '../sites.js';
+import { listingRef, SITES, siteForHost, siteForSender, unwrapTrackingUrl, type ListingRef, type SiteDef } from '../sites.js';
 
 export interface EmailInput {
   html?: string;
@@ -15,13 +15,49 @@ export interface EmailInput {
 
 export interface PendingLink { href: string; text: string }
 
+/** What the email is about: fresh ads, price drops on known ads, a reminder, a recap of the week… */
+export type EmailKind = 'new' | 'price_drop' | 'reminder' | 'recap' | 'other';
+
 export interface ParsedEmail {
   site?: string;
+  kind: EmailKind;
   listings: RawListing[];
   /** Tracking links that could not be unwrapped offline; resolve them over HTTP then call parse again with `resolved`. */
   pending: PendingLink[];
   ignored: number;
+  /** Number of ads the subject announces ("61 nouveaux véhicules…"), when the body shows only a preview. */
+  announced?: number;
+  /** The email's own link to the full list on the site ("Voir toutes les annonces"). */
+  moreUrl?: string;
 }
+
+const KIND_PATTERNS: Array<[EmailKind, RegExp]> = [
+  ['price_drop', /baisses? de prix|prix en baisse|nouveau prix|price drop/i],
+  ['reminder', /toujours int[ée]ress|encore disponible|vous avez consult|n[’']oubliez pas|toujours disponible/i],
+  ['recap', /r[ée]capitulatif|r[ée]sum[ée]|hebdo|de la semaine|digest|s[ée]lection|recommand|vous avez manqu|coups? de c[œo]ur/i],
+  ['new', /nouvelle?s? annonces?|nouveaux? v[ée]hicules?|nouveaux? r[ée]sultats?|nouvelle?s? offres?|correspond(ent)? [àa] (votre|ta) recherche|nouvelle annonce/i],
+];
+
+export function classifyEmail(subject?: string): EmailKind {
+  if (!subject) return 'other';
+  for (const [kind, re] of KIND_PATTERNS) if (re.test(subject)) return kind;
+  return 'other';
+}
+
+/** Emails that revisit ads published earlier (price drops, reminders, weekly recaps). */
+export function isDigestOfOlderAds(subject?: string): boolean {
+  const k = classifyEmail(subject);
+  return k === 'price_drop' || k === 'reminder' || k === 'recap';
+}
+
+/** The number of ads an alert email announces in its subject ("61 nouveaux véhicules…", "3 nouvelles annonces"). */
+export function announcedCount(subject?: string): number | undefined {
+  const m = subject ? /(\d{1,4})\s+nouve(?:aux?|lles?)\s+(?:annonces?|v[ée]hicules?|r[ée]sultats?|offres?)/i.exec(subject) : null;
+  return m ? Number(m[1]) : undefined;
+}
+
+/** A link to the full list of results on the site, by its wording ("Voir toutes les annonces", "Je découvre…"). */
+const MORE_TEXT = /toutes? les (annonces|r[ée]sultats|v[ée]hicules|offres)|tous les r[ée]sultats|voir (les )?\d+|d[ée]couvr\w* toutes|consultez toutes|voir plus d|afficher (les|toutes)/i;
 
 const CALL_TO_ACTION = /^(voir|voir l'annonce|voir l’annonce|détails|details|consulter|contacter|j'y vais|découvrir|cliquez|en savoir plus|voir plus|voir toutes?|afficher|ouvrir)$/i;
 const PRICE_OR_KM = /(\d[\d ]*\s?(€|km\b))/i;
@@ -47,7 +83,7 @@ export function parseAlertEmail(input: EmailInput, resolved: Map<string, string>
   const hint = input.from ? siteForSender(input.from) : undefined;
   if (input.html && input.html.trim()) return parseHtml(input, hint, resolved);
   if (input.text && input.text.trim()) return parseText(input, hint, resolved);
-  return { site: hint?.key, listings: [], pending: [], ignored: 0 };
+  return { site: hint?.key, kind: classifyEmail(input.subject), listings: [], pending: [], ignored: 0, announced: announcedCount(input.subject) };
 }
 
 function refFor(href: string, hint: SiteDef | undefined, resolved: Map<string, string>): { ref?: ListingRef; pending?: string } {
@@ -65,13 +101,23 @@ function parseHtml(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
   const anchors: Anchor[] = [];
   const pendingSet = new Map<string, string>();
   let ignored = 0;
+  let moreUrl: string | undefined;
   $('a[href]').each((_i, el) => {
     const href = ($(el).attr('href') ?? '').trim();
     if (!/^https?:/i.test(href)) return;
     const { ref, pending } = refFor(href, hint, resolved);
     const text = textOf($, el);
     if (pending) { if (!pendingSet.has(pending)) pendingSet.set(pending, text); return; }
-    if (!ref) { ignored++; return; }
+    if (!ref) {
+      ignored++;
+      // "Voir toutes les annonces" (text or image caption) pointing at the site: the rest of a truncated digest.
+      const caption = text || cleanText($(el).find('img').attr('alt') ?? '');
+      if (!moreUrl && MORE_TEXT.test(caption)) {
+        const final = resolved.get(href) ?? unwrapTrackingUrl(href).url;
+        try { const u = new URL(final); if (!hint || siteForHost(u.hostname)?.key === hint.key) moreUrl = final; } catch { /* lien illisible */ }
+      }
+      return;
+    }
     anchors.push({ el: el as Element, ref, text });
   });
 
@@ -125,9 +171,12 @@ function parseHtml(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
 
   return {
     site: hint?.key ?? listings[0]?.site,
+    kind: classifyEmail(input.subject),
     listings,
     pending: [...pendingSet].map(([href, text]) => ({ href, text })),
     ignored,
+    announced: announcedCount(input.subject),
+    moreUrl,
   };
 }
 
@@ -137,13 +186,6 @@ function commonAncestor(els: Element[]): AnyNode {
   const first = chain(els[0]);
   const rest = els.slice(1).map((e) => new Set(chain(e)));
   return first.find((n) => rest.every((s) => s.has(n))) ?? els[0];
-}
-
-const DIGEST_SUBJECT = /baisses? de prix|toujours int[ée]ress|r[ée]capitulatif|r[ée]sum[ée]|hebdo|de la semaine|digest|s[ée]lection|recommand|vous avez manqu|encore disponible|prix en baisse/i;
-
-/** Emails that revisit ads published earlier (price drops, reminders, weekly recaps). */
-export function isDigestOfOlderAds(subject?: string): boolean {
-  return !!subject && DIGEST_SUBJECT.test(subject);
 }
 
 const isInside = (node: AnyNode, el: AnyNode): boolean => { for (let p: AnyNode | null = el; p; p = p.parent as AnyNode | null) if (p === node) return true; return false; };
@@ -312,5 +354,5 @@ function parseText(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
       sellerType: sellerType(blockText), description: blockText.slice(0, 600), publishedAt: isDigestOfOlderAds(input.subject) ? undefined : input.date?.toISOString(), sourceRef: input.messageId,
     });
   });
-  return { site: hint?.key ?? listings[0]?.site, listings, pending: [...pending].map(([href, text]) => ({ href, text })), ignored };
+  return { site: hint?.key ?? listings[0]?.site, kind: classifyEmail(input.subject), listings, pending: [...pending].map(([href, text]) => ({ href, text })), ignored, announced: announcedCount(input.subject) };
 }

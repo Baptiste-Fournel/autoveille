@@ -196,14 +196,21 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
   app.get('/api/sources', async () => {
     const settings = store.getSettings();
     const runs = store.sourceRuns();
+    const emails = store.recentEmails(60).map((e) => ({ ...e, parsed: e.parsed_json ? JSON.parse(e.parsed_json) as { announced?: number; kind?: string; moreUrl?: string } : null, parsed_json: undefined }));
+    // The last email of each site that announced more ads than it showed: the rest waits on the site.
+    const digests: Record<string, { at: string | null; announced: number; received: number; url: string | null; subject: string }> = {};
+    for (const e of emails) {
+      if (!e.site || digests[e.site] || !e.parsed?.announced || e.parsed.kind !== 'new' || e.parsed.announced <= e.parsed_count) continue;
+      digests[e.site] = { at: e.received_at ?? e.processed_at, announced: e.parsed.announced, received: e.parsed_count, url: e.parsed.moreUrl ?? null, subject: e.subject };
+    }
     return {
       imap: { host: settings.imap.host, port: settings.imap.port, user: settings.imap.user, hasPassword: Boolean(settings.imap.pass), mailbox: settings.imap.mailbox, configured: Boolean(settings.imap.user && settings.imap.pass), lastRun: runs.find((r) => r.source === 'email') ?? null },
       sites: siteSetups(settings).map((s) => {
         const alert = settings.alerts[s.key];
-        return { ...s, done: Boolean(settings.alertsDone[s.key]), alert: alert ?? null, issues: alert ? alertMismatch(alert, settings) : [], advice: alert ? alertAdvice(alert, settings) : null };
+        return { ...s, done: Boolean(settings.alertsDone[s.key]), alert: alert ?? null, issues: alert ? alertMismatch(alert, settings) : [], advice: alert ? alertAdvice(alert, settings) : null, digest: digests[s.key] ?? null };
       }),
       httpSites: settings.httpSites.map((s) => ({ ...s, lastRun: runs.find((r) => r.source === `http:${s.id}`) ?? null })),
-      emails: store.recentEmails(25).map((e) => ({ ...e, parsed: e.parsed_json ? JSON.parse(e.parsed_json) : null, parsed_json: undefined })),
+      emails: emails.slice(0, 25),
     };
   });
 
