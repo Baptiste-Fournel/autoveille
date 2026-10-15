@@ -59,3 +59,26 @@ describe('fetchSite', () => {
     expect(r.listings[1]).toMatchObject({ externalId: '888888', price: 119000, km: 31000, year: 2006, city: 'Pessac' });
   });
 });
+
+import { targetedSearches } from './links.js';
+import { Store } from '../db.js';
+
+describe('targeted La Centrale searches', () => {
+  it('splits the followed brands into alerts of three at most, with a softer price floor', () => {
+    const s = new Store(':memory:').getSettings();
+    s.families.allemandes = { ...s.families.allemandes, enabled: true, brands: ['Porsche', 'Mercedes-Benz', 'BMW', 'Audi', 'Alpina'], minPrice: 40000, maxYear: 1995 };
+    s.families.italiennes = { ...s.families.italiennes, enabled: true, brands: ['Ferrari', 'Lamborghini', 'Maserati', 'Pagani', 'Alfa Romeo', 'Lancia', 'De Tomaso'], minPrice: 30000, maxYear: 1995 };
+    s.families.americaines = { ...s.families.americaines, enabled: true, brands: ['Ford', 'Chevrolet', 'Dodge', 'Jeep'], minPrice: 15000, maxYear: 1995 };
+    s.families.francaises = { ...s.families.francaises, enabled: false };
+    const out = targetedSearches(s);
+    expect(out.every((t) => t.brands.length <= 3)).toBe(true);
+    expect(out.find((t) => t.brands[0] === 'PORSCHE')?.minPrice).toBe(30000);
+    expect(out.find((t) => t.brands.includes('MERCEDES'))?.brands).toEqual(['MERCEDES']);
+    expect(out.find((t) => t.brands.includes('FERRARI'))?.brands).toEqual(['FERRARI', 'LAMBORGHINI', 'MASERATI']);
+    expect(out.find((t) => t.brands.includes('FORD:MUSTANG'))?.url).toContain('FORD%3AMUSTANG%3BCHEVROLET%3BDODGE');
+    expect(out.find((t) => t.brands.includes('JEEP'))?.minPrice).toBe(10000);
+    expect(out[out.length - 1]).toMatchObject({ maxYear: 1995 });
+    expect(out[out.length - 1].url).toContain('yearMax=1995');
+    expect(out.every((t) => t.url.includes('customerFamilyCodes=PART') && t.url.includes('distance=5'))).toBe(true);
+  });
+});

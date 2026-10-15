@@ -958,12 +958,19 @@ async function renderSources() {
       : el('div', { class: 'row' },
         el('a', { class: 'btn primary small', href: s.searchUrl, target: '_blank', rel: 'noopener' }, svg('open'), s.prefilled ? 'Créer l’alerte (recherche pré-remplie)' : 'Créer l’alerte sur le site'),
         el('button', { class: 'btn quiet small', type: 'button', onclick: () => setDone(s, true) }, 'C’est fait'));
+    // Sites whose emails only preview a few ads: one alert per small group of brands keeps each one complete.
+    const targeted = (s.targeted || []).length ? el('details', { class: 'adv targeted' },
+      el('summary', {}, `Alertes ciblées recommandées (${s.targeted.length})`),
+      el('div', { class: 'body' },
+        el('p', { class: 'small muted' }, `${s.label} ne met que quelques annonces dans chaque email. Une alerte par petit groupe de marques (3 au plus par recherche sur ce site), avec un prix plancher volontairement sous vos réglages, reste complète la plupart des jours. Pour chacune : ouvrir, vérifier, « Enregistrer ma recherche ». À refaire si vous ajoutez une marque dans Réglages.`),
+        el('ul', { class: 'targeted-list' }, s.targeted.map((t) => el('li', {}, el('a', { href: t.url, target: '_blank', rel: 'noopener' }, svg('open'), t.label)))))) : null;
     return el('div', { class: 'site' },
       el('div', { class: 'shead' }, el('h3', {}, s.label), status),
       confirmed,
       ...issues,
       done && !issues.length ? null : howTo,
-      buttons);
+      buttons,
+      targeted);
   };
   const sites = el('section', { class: 'card section' }, el('h2', {}, 'Les alertes sur les sites'),
     el('p', { class: 'muted small' }, 'Chaque site envoie ses nouvelles annonces à la boîte mail ci-dessus. L’alerte se crée une fois, sur le site, et volontairement large (toutes marques, particuliers, un rayon et un kilométrage plus grands que vos réglages) : c’est l’application qui trie, et ce qu’elle écarte reste consultable dans « Écartées par les filtres ». Quand le site confirme l’alerte par email, elle apparaît ci-dessous avec ses critères.'),

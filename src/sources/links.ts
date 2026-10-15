@@ -63,3 +63,48 @@ export function siteSetups(settings: Settings): SiteSetup[] {
     alertMaxKm: bounds.maxKm,
   }));
 }
+
+export interface TargetedSearch { label: string; url: string; brands: string[]; minPrice?: number; maxYear?: number }
+
+/** La Centrale's brand codes: upper case, no accents, "Mercedes-Benz" is just MERCEDES. */
+function lacentraleBrand(name: string): string {
+  const up = name.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+  return up === 'MERCEDES-BENZ' ? 'MERCEDES' : up;
+}
+
+/**
+ * One alert per small group of brands for sites whose alert emails only preview a few ads (La Centrale shows
+ * three): each alert then stays under that preview most days. Price floors are set below the rules on
+ * purpose (three quarters, rounded down to 5 000 €): the application does the fine sorting afterwards.
+ * La Centrale accepts three brands per saved search at most.
+ */
+export function targetedSearches(settings: Settings, site = 'lacentrale'): TargetedSearch[] {
+  if (site !== 'lacentrale') return [];
+  const postal = settings.zone.postalCode || '33000';
+  const km = alertBounds(settings).maxKm;
+  const base = (extra: string) => `https://www.lacentrale.fr/listing?${extra}&customerFamilyCodes=PART&distance=5&dptCp=${postal}&mileageMax=${km}&sortBy=firstOnlineDateDesc`;
+  const out: TargetedSearch[] = [];
+  let oldest = 0;
+  for (const key of ['allemandes', 'italiennes', 'americaines', 'francaises'] as const) {
+    const f = settings.families[key];
+    if (!f?.enabled || !f.brands.length) continue;
+    const floor = f.minPrice > 0 ? Math.max(5000, Math.floor((f.minPrice * 0.75) / 5000) * 5000) : 0;
+    if (f.maxYear > oldest) oldest = f.maxYear;
+    // Ford is American only through its US models; Mustang is the one La Centrale knows as a model code.
+    const codes = f.brands.map((b) => (key === 'americaines' && /^ford$/i.test(b) ? 'FORD:MUSTANG' : lacentraleBrand(b)));
+    // Common brands get an alert of their own; rare ones share, three at a time.
+    const alone = key === 'allemandes' ? codes.filter((c) => /^(PORSCHE|MERCEDES|BMW|AUDI)$/.test(c)) : [];
+    const shared = codes.filter((c) => !alone.includes(c));
+    const groups = [...alone.map((c) => [c]), ...Array.from({ length: Math.ceil(shared.length / 3) }, (_, i) => shared.slice(i * 3, i * 3 + 3))];
+    for (const g of groups) {
+      const names = g.map((c) => c.replace('FORD:MUSTANG', 'Ford Mustang').replace(/^(\w)(\w*)/g, (_m, a: string, b: string) => a + b.toLowerCase()).replace(/ (\w)/g, (m) => m.toUpperCase()));
+      out.push({
+        label: `${names.join(', ')}${floor ? ` à partir de ${floor.toLocaleString('fr-FR').replace(/[  ]/g, ' ')} €` : ''}`,
+        url: base(`makesModelsCommercialNames=${encodeURIComponent(g.join(';'))}${floor ? `&priceMin=${floor}` : ''}`),
+        brands: g, minPrice: floor || undefined,
+      });
+    }
+  }
+  if (oldest > 0) out.push({ label: `Collection : toutes marques jusqu’à ${oldest}`, url: base(`yearMax=${oldest}`), brands: [], maxYear: oldest });
+  return out;
+}

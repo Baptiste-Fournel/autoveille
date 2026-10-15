@@ -12,7 +12,7 @@ import { customBrands } from './pipeline.js';
 import { buildVars, lintTemplate, render, VARIABLE_HELP } from './messages/templates.js';
 import { testMailbox } from './sources/email/imap.js';
 import { fetchSite } from './sources/http.js';
-import { siteSetups } from './sources/links.js';
+import { siteSetups, targetedSearches } from './sources/links.js';
 import { alertAdvice, alertMismatch, siteLabel } from './sources/email/confirmations.js';
 import { FAMILIES, FAMILY_LABELS, type Family, type RawListing, type Settings, type Status } from './types.js';
 
@@ -207,7 +207,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
       imap: { host: settings.imap.host, port: settings.imap.port, user: settings.imap.user, hasPassword: Boolean(settings.imap.pass), mailbox: settings.imap.mailbox, configured: Boolean(settings.imap.user && settings.imap.pass), lastRun: runs.find((r) => r.source === 'email') ?? null },
       sites: siteSetups(settings).map((s) => {
         const alert = settings.alerts[s.key];
-        return { ...s, done: Boolean(settings.alertsDone[s.key]), alert: alert ?? null, issues: alert ? alertMismatch(alert, settings) : [], advice: alert ? alertAdvice(alert, settings) : null, digest: digests[s.key] ?? null };
+        return { ...s, done: Boolean(settings.alertsDone[s.key]), alert: alert ?? null, issues: alert ? alertMismatch(alert, settings) : [], advice: alert ? alertAdvice(alert, settings) : null, digest: digests[s.key] ?? null, targeted: targetedSearches(settings, s.key) };
       }),
       httpSites: settings.httpSites.map((s) => ({ ...s, lastRun: runs.find((r) => r.source === `http:${s.id}`) ?? null })),
       emails: emails.slice(0, 25),

@@ -411,3 +411,10 @@ details.adv.card > summary { font-size: 16px; }
 /* A site's email that only previewed its list: the gap and the way to the rest. */
 .note.digest { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .note.digest .btn { margin: 0; }
+
+/* Recommended targeted alerts for sites that only preview their lists by email. */
+.site .targeted { margin-top: 10px; }
+.targeted-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.targeted-list a { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font-size: 14.5px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); max-width: 100%; }
+.targeted-list a:hover { border-color: var(--ink-2); }
+.targeted-list svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
