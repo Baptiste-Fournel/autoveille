@@ -169,3 +169,81 @@ describe('AutoScout24 saved-search email', () => {
     expect(out.listings.some((l) => /apple|google/.test(l.url))).toBe(false);
   });
 });
+
+// Real alert emails (anonymised), kept as fixtures so a layout change on a site shows up here first.
+import fs from 'node:fs';
+import path from 'node:path';
+const fixture = (name: string) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
+
+describe('ParuVendu alert email (real layout)', () => {
+  it('takes the ad title, not the spec line, and reads price, km, year', () => {
+    const out = parseAlertEmail({ html: fixture('paruvendu-alerte.html'), from: 'info@paruvendu.fr', subject: '🚗 1 nouvelle annonce', date: new Date('2026-10-15T06:05:12Z') });
+    expect(out.listings).toHaveLength(1);
+    const l = out.listings[0];
+    expect(l.site).toBe('paruvendu');
+    expect(l.externalId).toBe('1296277822A1KVVOAUTT');
+    expect(l.title).toBe('Audi Tt éthanol');
+    expect(l).toMatchObject({ price: 17000, km: 75000, year: 2011 });
+    expect(l.url).not.toMatch(/ticket=|mailUniqId/);
+    expect(l.imageUrl).toMatch(/^https:\/\/media\.paruvendu\.fr\//);
+  });
+});
+
+describe('La Centrale digest email (real layout)', () => {
+  // Every link goes through the site's click tracker; the test resolves them the way the app does over HTTP.
+  const resolved = new Map<string, string>();
+  const ads = ['69115730001', '69115730002', '69115730003'];
+  for (let t = 1; t <= 49; t++) {
+    const href = `https://clicks.mail-alerte.lacentrale.fr/f/a/t${t}~~/AAAHahA~/x`;
+    const ad = t >= 4 && t <= 13 ? 0 : t >= 14 && t <= 23 ? 1 : t >= 24 && t <= 33 ? 2 : -1;
+    resolved.set(href, ad >= 0 ? `https://www.lacentrale.fr/auto-occasion-annonce-${ads[ad]}.html` : 'https://www.lacentrale.fr/listing?customerFamilyCodes=PART');
+  }
+
+  it('reads the three previewed ads with price, km, seller type and département', () => {
+    const input = { html: fixture('lacentrale-alerte.html'), from: 'info@mail-alerte.lacentrale.fr', subject: '61 nouveaux véhicules correspondent à votre recherche', date: new Date('2026-10-15T06:36:59Z') };
+    const first = parseAlertEmail(input);
+    expect(first.listings).toHaveLength(0);
+    expect(first.pending.length).toBeGreaterThan(30);
+    const out = parseAlertEmail(input, resolved);
+    expect(out.listings.map((l) => l.title)).toEqual(['VOLKSWAGEN COCCINELLE', 'OPEL MERIVA II phase 2', 'LAND ROVER DISCOVERY SPORT']);
+    expect(out.listings[0]).toMatchObject({ price: 10500, km: 92000, sellerType: 'particulier', postalCode: '33', city: 'Gironde (33)' });
+    expect(out.listings[2]).toMatchObject({ price: 14500, km: 120000 });
+    // The car's photo, not the site's pictograms (every image in that email is captioned « La Centrale »).
+    expect(out.listings.map((l) => l.imageUrl)).toEqual([
+      expect.stringMatching(/^https:\/\/pictures\.lacentrale\.fr\/classifieds\/B104314094_/),
+      expect.stringMatching(/^https:\/\/pictures\.lacentrale\.fr\/classifieds\/B104315440_/),
+      expect.stringMatching(/^https:\/\/pictures\.lacentrale\.fr\/classifieds\/B104315417_/),
+    ]);
+  });
+});
+
+describe('digests of older ads', () => {
+  const html = (img1: string, img2: string) => `<html><body><p>2 baisses de prix</p>
+  <table><tr><td><a href="https://www.lacentrale.fr/auto-occasion-annonce-69115730001.html"><img src="${img1}" width="272" height="203"></a></td>
+  <td><a href="https://www.lacentrale.fr/auto-occasion-annonce-69115730001.html">RENAULT KOLEOS</a><br>131 000 km<br>14 700 €</td></tr></table>
+  <table><tr><td><a href="https://www.lacentrale.fr/auto-occasion-annonce-69115730002.html"><img src="${img2}" width="272" height="203"></a></td>
+  <td><a href="https://www.lacentrale.fr/auto-occasion-annonce-69115730002.html">PEUGEOT 3008</a><br>80 000 km<br>18 900 €</td></tr></table>
+  </body></html>`;
+  it('carries no publication date and ignores the site’s illustration used in place of a photo', () => {
+    const generic = 'https://cdn.braze.eu/appboy/communication/assets/image_assets/images/6aa3cb0f/orig';
+    const out = parseAlertEmail({ html: html(generic, generic), from: 'info@mail-alerte.lacentrale.fr', subject: '↘️ 108 baisses de prix sur votre alerte', date: new Date('2026-10-15T10:37:21Z') });
+    expect(out.listings).toHaveLength(2);
+    expect(out.listings[0]).toMatchObject({ title: 'RENAULT KOLEOS', price: 14700, km: 131000 });
+    expect(out.listings.every((l) => l.publishedAt === undefined)).toBe(true);
+    expect(out.listings.every((l) => l.imageUrl === undefined)).toBe(true);
+  });
+  it('keeps the date of a fresh-listings email and the photo of each ad', () => {
+    const fresh = parseAlertEmail({ html: html('https://pictures.lacentrale.fr/classifieds/A_STANDARD_0.jpg', 'https://pictures.lacentrale.fr/classifieds/B_STANDARD_0.jpg'), from: 'info@mail-alerte.lacentrale.fr', subject: '2 nouveaux véhicules correspondent à votre recherche', date: new Date('2026-10-15T10:37:21Z') });
+    expect(fresh.listings.map((l) => l.imageUrl)).toEqual(['https://pictures.lacentrale.fr/classifieds/A_STANDARD_0.jpg', 'https://pictures.lacentrale.fr/classifieds/B_STANDARD_0.jpg']);
+    expect(fresh.listings[0].publishedAt).toBe('2026-10-15T10:37:21.000Z');
+  });
+  it('drops a picture shared by several ads of an unknown site', () => {
+    const shared = `<html><body>
+    <div><a href="https://www.petit-site-auto.fr/annonce/porsche-911/987654"><img src="https://www.petit-site-auto.fr/img/default.jpg" width="200"></a> <a href="https://www.petit-site-auto.fr/annonce/porsche-911/987654">Porsche 911 Carrera</a> 42 000 km 89 900 €</div>
+    <div><a href="https://www.petit-site-auto.fr/annonce/bmw-m3/987655"><img src="https://www.petit-site-auto.fr/img/default.jpg" width="200"></a> <a href="https://www.petit-site-auto.fr/annonce/bmw-m3/987655">BMW M3 Compétition</a> 18 000 km 79 000 €</div>
+    </body></html>`;
+    const out = parseAlertEmail({ html: shared, from: 'alertes@petit-site-auto.fr', subject: '2 nouvelles annonces' });
+    expect(out.listings).toHaveLength(2);
+    expect(out.listings.every((l) => l.imageUrl === undefined)).toBe(true);
+  });
+});

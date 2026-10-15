@@ -3,7 +3,7 @@ import { simpleParser } from 'mailparser';
 import type { Store } from '../../db.js';
 import type { Pipeline } from '../../pipeline.js';
 import { resolveRedirect } from '../sites.js';
-import { parseAlertEmail } from './parse.js';
+import { isDigestOfOlderAds, parseAlertEmail } from './parse.js';
 import { detectAlertConfirmation } from './confirmations.js';
 
 export interface ImapConfig { host: string; port: number; user: string; pass: string; mailbox: string }
@@ -65,15 +65,17 @@ export async function pollMailbox(cfg: ImapConfig, store: Store, pipeline: Pipel
           let matched = 0;
           const emailDate = parsed.date && !Number.isNaN(parsed.date.getTime()) ? parsed.date.toISOString() : undefined;
           for (const listing of out.listings) {
-            // Alerts leave within minutes of the publication: the email's date is the best date we have.
-            if (!listing.publishedAt && emailDate) listing.publishedAt = emailDate;
+            // Alerts leave within minutes of the publication: the email's date is the best date we have —
+            // except for digests of older ads (price drops, reminders), which say nothing about it.
+            if (!listing.publishedAt && emailDate && !isDigestOfOlderAds(subject)) listing.publishedAt = emailDate;
             const r = await pipeline.ingest(listing);
             if (r.kind === 'new' && r.matched) matched++;
           }
           store.markEmail({
             message_id: messageId, uid, subject, sender: from, received_at: parsed.date?.toISOString() ?? null, site: out.site ?? null,
             parsed_count: out.listings.length,
-            parsed_json: JSON.stringify({ listings: out.listings.map((l) => ({ title: l.title, price: l.price, km: l.km, year: l.year, city: l.city, postalCode: l.postalCode, sellerType: l.sellerType, url: l.url })), pending: out.pending.length, ignored: out.ignored }),
+            // "61 nouveaux véhicules…" with 3 ads in the body: the site sent a digest, and the gap is worth showing.
+            parsed_json: JSON.stringify({ listings: out.listings.map((l) => ({ title: l.title, price: l.price, km: l.km, year: l.year, city: l.city, postalCode: l.postalCode, sellerType: l.sellerType, url: l.url })), pending: out.pending.length, ignored: out.ignored, announced: announcedCount(subject) }),
             error: null,
           });
           result.processed++;
@@ -112,4 +114,10 @@ export async function testMailbox(cfg: ImapConfig): Promise<{ messages: number }
   } finally {
     await client.logout().catch(() => {});
   }
+}
+
+/** The number of ads an alert email announces in its subject ("61 nouveaux véhicules…", "3 nouvelles annonces"). */
+export function announcedCount(subject: string): number | undefined {
+  const m = /(\d{1,4})\s+nouve(?:aux?|lles?)\s+(?:annonces?|v[ée]hicules?|r[ée]sultats?|offres?)/i.exec(subject);
+  return m ? Number(m[1]) : undefined;
 }

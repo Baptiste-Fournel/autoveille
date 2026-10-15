@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import type { AnyNode, Element } from 'domhandler';
 import type { RawListing, SellerType } from '../../types.js';
 import { cleanText, parseKm, parseLocation, parsePrice, parseYear } from '../../listings/normalize.js';
-import { listingRef, siteForSender, unwrapTrackingUrl, type ListingRef, type SiteDef } from '../sites.js';
+import { listingRef, SITES, siteForSender, unwrapTrackingUrl, type ListingRef, type SiteDef } from '../sites.js';
 
 export interface EmailInput {
   html?: string;
@@ -89,13 +89,16 @@ function parseHtml(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
   };
 
   const listings: RawListing[] = [];
+  // Reminders and price-drop digests list ads published earlier: the email's date says nothing about them.
+  const publishedAt = isDigestOfOlderAds(input.subject) ? undefined : input.date?.toISOString();
   for (const [key, group] of groups) {
-    const block = findBlock($, group[0].el, key, keyOf);
-    const blockText = textOf($, block);
+    const block = findBlock($, group, key, keyOf);
+    const blockText = cleanText(block.map((n) => textOf($, n)).join(' '));
     const title = pickTitle($, group, block, blockText);
     if (!title) continue;
     const ref = group[0].ref;
     const loc = parseLocation(blockText);
+    const dept = loc.postalCode ? undefined : parseDepartment(blockText);
     const listing: RawListing = {
       site: ref.site,
       siteLabel: ref.siteLabel,
@@ -105,16 +108,20 @@ function parseHtml(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
       price: parsePrice(blockText),
       km: parseKm(blockText),
       year: parseYear(`${title} ${blockText}`),
-      city: loc.city,
-      postalCode: loc.postalCode,
+      city: loc.city ?? dept?.city,
+      postalCode: loc.postalCode ?? dept?.postalCode,
       sellerType: sellerType(blockText),
       description: blockText.slice(0, 600),
-      imageUrl: pickImage($, block),
-      publishedAt: input.date?.toISOString(),
+      imageUrl: pickImage($, block, ref.site),
+      publishedAt,
       sourceRef: input.messageId,
     };
     listings.push(listing);
   }
+  // The same picture on several ads is the site's illustration, not a photo of the car.
+  const seen = new Map<string, number>();
+  for (const l of listings) if (l.imageUrl) seen.set(l.imageUrl, (seen.get(l.imageUrl) ?? 0) + 1);
+  for (const l of listings) if (l.imageUrl && (seen.get(l.imageUrl) ?? 0) > 1) l.imageUrl = undefined;
 
   return {
     site: hint?.key ?? listings[0]?.site,
@@ -124,35 +131,100 @@ function parseHtml(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
   };
 }
 
-/** The smallest container around the anchor that holds its price/km but no link to another ad. */
-function findBlock($: cheerio.CheerioAPI, start: Element, key: string, keyOf: (el: Element) => string | undefined): AnyNode {
+/** Lowest common ancestor of the ad's links (title, photo, price, button are often cousins in nested tables). */
+function commonAncestor(els: Element[]): AnyNode {
+  const chain = (el: AnyNode): AnyNode[] => { const out: AnyNode[] = []; for (let n: AnyNode | null = el; n; n = n.parent as AnyNode | null) out.push(n); return out; };
+  const first = chain(els[0]);
+  const rest = els.slice(1).map((e) => new Set(chain(e)));
+  return first.find((n) => rest.every((s) => s.has(n))) ?? els[0];
+}
+
+const DIGEST_SUBJECT = /baisses? de prix|toujours int[ée]ress|r[ée]capitulatif|r[ée]sum[ée]|hebdo|de la semaine|digest|s[ée]lection|recommand|vous avez manqu|encore disponible|prix en baisse/i;
+
+/** Emails that revisit ads published earlier (price drops, reminders, weekly recaps). */
+export function isDigestOfOlderAds(subject?: string): boolean {
+  return !!subject && DIGEST_SUBJECT.test(subject);
+}
+
+const isInside = (node: AnyNode, el: AnyNode): boolean => { for (let p: AnyNode | null = el; p; p = p.parent as AnyNode | null) if (p === node) return true; return false; };
+
+/**
+ * The part of the email that belongs to one ad. With several links to the ad (title, photo, price, button),
+ * it is the run of rows between the first and the last of them under their common ancestor; with a single
+ * link, the smallest container that also holds a price or kilometres.
+ */
+function findBlock($: cheerio.CheerioAPI, group: Anchor[], key: string, keyOf: (el: Element) => string | undefined): AnyNode[] {
+  const els = group.map((a) => a.el as AnyNode);
+  if (els.length > 1) {
+    const lca = commonAncestor(group.map((a) => a.el));
+    const kids = ((lca as Element).children ?? []) as AnyNode[];
+    const idx = kids.map((k, i) => (els.some((e) => isInside(k, e)) ? i : -1)).filter((i) => i >= 0);
+    if (idx.length) {
+      const range = kids.slice(idx[0], idx[idx.length - 1] + 1);
+      const text = range.map((n) => textOf($, n)).join(' ');
+      if (PRICE_OR_KM.test(text) && text.length > 20) return range;
+    }
+    return [climb($, lca, key, keyOf)];
+  }
+  return [climb($, els[0], key, keyOf)];
+}
+
+/** The smallest container around a node that holds a price or kilometres but no link to another ad. */
+function climb($: cheerio.CheerioAPI, start: AnyNode, key: string, keyOf: (el: Element) => string | undefined): AnyNode {
+  const foreignIn = (n: AnyNode) => $(n).find('a[href]').toArray().some((a) => { const k = keyOf(a as Element); return k !== undefined && k !== key; });
   let node: AnyNode = start;
   let best: AnyNode = start;
-  for (let depth = 0; depth < 12; depth++) {
+  // Wrappers that add no text (nested single-cell tables) do not count as levels.
+  for (let levels = 0, steps = 0; levels < 12 && steps < 40; steps++) {
     const parent = node.parent as AnyNode | null;
     if (!parent || parent.type === 'root') break;
-    const foreign = $(parent).find('a[href]').toArray().some((a) => { const k = keyOf(a as Element); return k !== undefined && k !== key; });
-    if (foreign) break;
+    if (foreignIn(parent)) break;
     const text = textOf($, parent);
     if (text.length > 1500) break;
+    if (text.length !== textOf($, node).length) levels++;
     best = parent;
     node = parent;
     // Once the block carries a price or km and a reasonable amount of text, one more level is enough.
-    if (PRICE_OR_KM.test(text) && text.length > 40 && depth >= 2) {
+    if (PRICE_OR_KM.test(text) && text.length > 40 && levels >= 2) {
       const grand = parent.parent as AnyNode | null;
       if (!grand || grand.type === 'root') break;
-      const grandForeign = $(grand).find('a[href]').toArray().some((a) => { const k = keyOf(a as Element); return k !== undefined && k !== key; });
-      const grandText = textOf($, grand);
-      if (!grandForeign && grandText.length <= 1500) best = grand;
+      if (!foreignIn(grand) && textOf($, grand).length <= 1500) best = grand;
       break;
     }
   }
   return best;
 }
 
-function pickTitle($: cheerio.CheerioAPI, group: Anchor[], block: AnyNode, blockText: string): string | undefined {
-  const texts = group.map((a) => a.text).filter((t) => t.length >= 6 && !CALL_TO_ACTION.test(t) && !/^https?:/i.test(t));
+/** A line of specs ("Coupé - Essence - Année 2011 - 75 000 km", "10 500 €") is not a title. */
+const SPEC_LINE = /(\d[\d ]*\s?(€|km\b))|\bann[ée]e\s*:?\s*\d{4}\b|^\d{4}\b/i;
+
+/** "Vendeur particulier 33": a bare département number closing the block (La Centrale). */
+function parseDepartment(text: string): { city: string; postalCode: string } | undefined {
+  const m = /(?:vendeur\s+(?:particulier|professionnel|pro)\s+|\s)(0[1-9]|[1-8]\d|9[0-5])\s*$/i.exec(cleanText(text));
+  if (!m) return undefined;
+  const name = DEPARTMENTS[m[1]];
+  return name ? { city: `${name} (${m[1]})`, postalCode: m[1] } : undefined;
+}
+
+const DEPARTMENTS: Record<string, string> = {
+  '01': 'Ain', '02': 'Aisne', '03': 'Allier', '04': 'Alpes-de-Haute-Provence', '05': 'Hautes-Alpes', '06': 'Alpes-Maritimes', '07': 'Ardèche', '08': 'Ardennes', '09': 'Ariège',
+  '10': 'Aube', '11': 'Aude', '12': 'Aveyron', '13': 'Bouches-du-Rhône', '14': 'Calvados', '15': 'Cantal', '16': 'Charente', '17': 'Charente-Maritime', '18': 'Cher', '19': 'Corrèze',
+  '21': 'Côte-d’Or', '22': 'Côtes-d’Armor', '23': 'Creuse', '24': 'Dordogne', '25': 'Doubs', '26': 'Drôme', '27': 'Eure', '28': 'Eure-et-Loir', '29': 'Finistère',
+  '30': 'Gard', '31': 'Haute-Garonne', '32': 'Gers', '33': 'Gironde', '34': 'Hérault', '35': 'Ille-et-Vilaine', '36': 'Indre', '37': 'Indre-et-Loire', '38': 'Isère', '39': 'Jura',
+  '40': 'Landes', '41': 'Loir-et-Cher', '42': 'Loire', '43': 'Haute-Loire', '44': 'Loire-Atlantique', '45': 'Loiret', '46': 'Lot', '47': 'Lot-et-Garonne', '48': 'Lozère', '49': 'Maine-et-Loire',
+  '50': 'Manche', '51': 'Marne', '52': 'Haute-Marne', '53': 'Mayenne', '54': 'Meurthe-et-Moselle', '55': 'Meuse', '56': 'Morbihan', '57': 'Moselle', '58': 'Nièvre', '59': 'Nord',
+  '60': 'Oise', '61': 'Orne', '62': 'Pas-de-Calais', '63': 'Puy-de-Dôme', '64': 'Pyrénées-Atlantiques', '65': 'Hautes-Pyrénées', '66': 'Pyrénées-Orientales', '67': 'Bas-Rhin', '68': 'Haut-Rhin', '69': 'Rhône',
+  '70': 'Haute-Saône', '71': 'Saône-et-Loire', '72': 'Sarthe', '73': 'Savoie', '74': 'Haute-Savoie', '75': 'Paris', '76': 'Seine-Maritime', '77': 'Seine-et-Marne', '78': 'Yvelines', '79': 'Deux-Sèvres',
+  '80': 'Somme', '81': 'Tarn', '82': 'Tarn-et-Garonne', '83': 'Var', '84': 'Vaucluse', '85': 'Vendée', '86': 'Vienne', '87': 'Haute-Vienne', '88': 'Vosges', '89': 'Yonne',
+  '90': 'Territoire de Belfort', '91': 'Essonne', '92': 'Hauts-de-Seine', '93': 'Seine-Saint-Denis', '94': 'Val-de-Marne', '95': 'Val-d’Oise',
+};
+
+function pickTitle($: cheerio.CheerioAPI, group: Anchor[], block: AnyNode[], blockText: string): string | undefined {
+  const candidates = group.map((a) => a.text).filter((t) => t.length >= 6 && !CALL_TO_ACTION.test(t) && !/^https?:/i.test(t));
+  // Titles first; the longest of them wins ("Porsche 911 Carrera S" over "Porsche"). Spec lines only as a last resort.
+  const texts = candidates.filter((t) => !SPEC_LINE.test(t));
   if (texts.length) return cleanTitle(texts.sort((a, b) => b.length - a.length)[0]);
+  if (candidates.length) return cleanTitle(candidates.sort((a, b) => b.length - a.length)[0]);
   const headingEl = $(block).find('h1,h2,h3,h4,strong,b').first();
   const heading = headingEl.length ? textOf($, headingEl[0]) : '';
   if (heading.length >= 6 && !CALL_TO_ACTION.test(heading)) return cleanTitle(heading);
@@ -166,15 +238,36 @@ function cleanTitle(t: string): string {
   return cleanText(t).replace(/\s*(\d[\d ]*\s?€.*)$/, '').replace(/\s*-\s*$/, '').slice(0, 160);
 }
 
-function pickImage($: cheerio.CheerioAPI, block: AnyNode): string | undefined {
+/**
+ * The photo of the car: an image served by the site's picture host when the site is known (the rest is
+ * logos, pictograms and buttons), otherwise the first visible image that is not a pictogram.
+ */
+function pickImage($: cheerio.CheerioAPI, block: AnyNode[], site?: string): string | undefined {
   const imgs = $(block).find('img[src]').toArray();
-  for (const img of imgs) {
+  const visible = (img: Element) => {
     const src = ($(img).attr('src') ?? '').trim();
     const w = Number($(img).attr('width') ?? 0);
     const h = Number($(img).attr('height') ?? 0);
-    if (!/^https?:/i.test(src)) continue;
-    if ((w && w < 40) || (h && h < 40)) continue;
-    if (/pixel|track|beacon|spacer|logo|icon/i.test(src)) continue;
+    if (!/^https?:/i.test(src)) return undefined;
+    if ((w && w < 40) || (h && h < 40)) return undefined;
+    if (/display\s*:\s*none/i.test($(img).attr('style') ?? '')) return undefined;
+    return src;
+  };
+  const hosts = SITES.find((s) => s.key === site)?.photoHosts;
+  if (hosts?.length) {
+    for (const img of imgs) {
+      const src = visible(img as Element);
+      if (!src) continue;
+      let host = '';
+      try { host = new URL(src).hostname.toLowerCase(); } catch { continue; }
+      if (hosts.some((h) => host === h || host.endsWith('.' + h))) return src;
+    }
+    return undefined;
+  }
+  for (const img of imgs) {
+    const src = visible(img as Element);
+    if (!src) continue;
+    if (/pixel|track|beacon|spacer|logo|icon|picto|button|bouton|badge|arrow|fleche|store/i.test(src)) continue;
     return src;
   }
   return undefined;
@@ -216,7 +309,7 @@ function parseText(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
     listings.push({
       site: ref.site, siteLabel: ref.siteLabel, externalId: ref.id, url: ref.url, title: cleanTitle(title),
       price: parsePrice(blockText), km: parseKm(blockText), year: parseYear(blockText), city: loc.city, postalCode: loc.postalCode,
-      sellerType: sellerType(blockText), description: blockText.slice(0, 600), publishedAt: input.date?.toISOString(), sourceRef: input.messageId,
+      sellerType: sellerType(blockText), description: blockText.slice(0, 600), publishedAt: isDigestOfOlderAds(input.subject) ? undefined : input.date?.toISOString(), sourceRef: input.messageId,
     });
   });
   return { site: hint?.key ?? listings[0]?.site, listings, pending: [...pending].map(([href, text]) => ({ href, text })), ignored };
