@@ -101,6 +101,12 @@ export function targetedSearches(settings: Settings, site = 'lacentrale'): Targe
     const alone = key === 'allemandes' ? codes.filter((c) => /^(PORSCHE|MERCEDES|BMW|AUDI)$/.test(c)) : [];
     const shared = codes.filter((c) => !alone.includes(c));
     const groups = [...alone.map((c) => [c]), ...Array.from({ length: Math.ceil(shared.length / 3) }, (_, i) => shared.slice(i * 3, i * 3 + 3))];
+    // The other Fords the rules treat as American get a search of their own (a plain Ranger or Explorer would flood it).
+    if (codes.includes('FORD:MUSTANG')) {
+      const us: Record<string, string> = { 'FORD:GT': 'Ford GT', 'FORD:BRONCO': 'Ford Bronco', 'FORD:F-150': 'Ford F-150' };
+      Object.entries(us).forEach(([c, n]) => names.set(c, n));
+      groups.push(Object.keys(us));
+    }
     for (const g of groups) {
       out.push({
         label: `${g.map((c) => names.get(c) ?? c).join(', ')}${floor ? ` à partir de ${floor.toLocaleString('fr-FR').replace(/[  ]/g, ' ')} €` : ''}`,

@@ -82,6 +82,8 @@ describe('targeted La Centrale searches', () => {
     expect(out.find((t) => t.brands.includes('LANCIA'))?.label).toContain('Pagani, Alfa Romeo, Lancia');
     expect(out.find((t) => t.brands.includes('DE TOMASO'))?.label).toMatch(/^De Tomaso à partir de 20/);
     expect(out.find((t) => t.brands.includes('FORD:MUSTANG'))?.label).toMatch(/^Ford Mustang, Chevrolet, Dodge/);
+    expect(out.find((t) => t.brands.includes('FORD:BRONCO'))).toMatchObject({ brands: ['FORD:GT', 'FORD:BRONCO', 'FORD:F-150'], minPrice: 10000 });
+    expect(out.find((t) => t.brands.includes('FORD:BRONCO'))?.label).toMatch(/^Ford GT, Ford Bronco, Ford F-150/);
     expect(out[out.length - 1]).toMatchObject({ maxYear: 1995 });
     expect(out[out.length - 1].url).toContain('yearMax=1995');
     expect(out.every((t) => t.url.includes('customerFamilyCodes=PART') && t.url.includes('distance=5'))).toBe(true);
