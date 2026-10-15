@@ -77,6 +77,11 @@ describe('targeted La Centrale searches', () => {
     expect(out.find((t) => t.brands.includes('FERRARI'))?.brands).toEqual(['FERRARI', 'LAMBORGHINI', 'MASERATI']);
     expect(out.find((t) => t.brands.includes('FORD:MUSTANG'))?.url).toContain('FORD%3AMUSTANG%3BCHEVROLET%3BDODGE');
     expect(out.find((t) => t.brands.includes('JEEP'))?.minPrice).toBe(10000);
+    // Labels keep the brand names as written in the settings, not the site's upper-case codes.
+    expect(out.find((t) => t.brands[0] === 'BMW')?.label).toMatch(/^BMW à partir de 30/);
+    expect(out.find((t) => t.brands.includes('LANCIA'))?.label).toContain('Pagani, Alfa Romeo, Lancia');
+    expect(out.find((t) => t.brands.includes('DE TOMASO'))?.label).toMatch(/^De Tomaso à partir de 20/);
+    expect(out.find((t) => t.brands.includes('FORD:MUSTANG'))?.label).toMatch(/^Ford Mustang, Chevrolet, Dodge/);
     expect(out[out.length - 1]).toMatchObject({ maxYear: 1995 });
     expect(out[out.length - 1].url).toContain('yearMax=1995');
     expect(out.every((t) => t.url.includes('customerFamilyCodes=PART') && t.url.includes('distance=5'))).toBe(true);

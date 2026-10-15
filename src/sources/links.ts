@@ -91,15 +91,19 @@ export function targetedSearches(settings: Settings, site = 'lacentrale'): Targe
     const floor = f.minPrice > 0 ? Math.max(5000, Math.floor((f.minPrice * 0.75) / 5000) * 5000) : 0;
     if (f.maxYear > oldest) oldest = f.maxYear;
     // Ford is American only through its US models; Mustang is the one La Centrale knows as a model code.
-    const codes = f.brands.map((b) => (key === 'americaines' && /^ford$/i.test(b) ? 'FORD:MUSTANG' : lacentraleBrand(b)));
+    const names = new Map<string, string>();
+    const codes = f.brands.map((b) => {
+      const code = key === 'americaines' && /^ford$/i.test(b) ? 'FORD:MUSTANG' : lacentraleBrand(b);
+      names.set(code, code === 'FORD:MUSTANG' ? 'Ford Mustang' : b.trim());
+      return code;
+    });
     // Common brands get an alert of their own; rare ones share, three at a time.
     const alone = key === 'allemandes' ? codes.filter((c) => /^(PORSCHE|MERCEDES|BMW|AUDI)$/.test(c)) : [];
     const shared = codes.filter((c) => !alone.includes(c));
     const groups = [...alone.map((c) => [c]), ...Array.from({ length: Math.ceil(shared.length / 3) }, (_, i) => shared.slice(i * 3, i * 3 + 3))];
     for (const g of groups) {
-      const names = g.map((c) => c.replace('FORD:MUSTANG', 'Ford Mustang').replace(/^(\w)(\w*)/g, (_m, a: string, b: string) => a + b.toLowerCase()).replace(/ (\w)/g, (m) => m.toUpperCase()));
       out.push({
-        label: `${names.join(', ')}${floor ? ` à partir de ${floor.toLocaleString('fr-FR').replace(/[  ]/g, ' ')} €` : ''}`,
+        label: `${g.map((c) => names.get(c) ?? c).join(', ')}${floor ? ` à partir de ${floor.toLocaleString('fr-FR').replace(/[  ]/g, ' ')} €` : ''}`,
         url: base(`makesModelsCommercialNames=${encodeURIComponent(g.join(';'))}${floor ? `&priceMin=${floor}` : ''}`),
         brands: g, minPrice: floor || undefined,
       });
