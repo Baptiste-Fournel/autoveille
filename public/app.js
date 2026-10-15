@@ -962,7 +962,7 @@ async function renderSources() {
     const targeted = (s.targeted || []).length ? el('details', { class: 'adv targeted' },
       el('summary', {}, `Alertes ciblées recommandées (${s.targeted.length})`),
       el('div', { class: 'body' },
-        el('p', { class: 'small muted' }, `${s.label} ne met que quelques annonces dans chaque email. Une alerte par petit groupe de marques (3 au plus par recherche sur ce site), avec un prix plancher volontairement sous vos réglages, reste complète la plupart des jours. Pour chacune : ouvrir, vérifier, « Enregistrer ma recherche ». À refaire si vous ajoutez une marque dans Réglages.`),
+        el('p', { class: 'small muted' }, `${s.label} ne met que quelques annonces dans chaque email. Une alerte par petit groupe de marques (3 au plus par recherche sur ce site), avec un prix plancher volontairement sous vos réglages, reste complète la plupart des jours. Pour chacune : ouvrir, vérifier, « Enregistrer ma recherche ». Les groupes sont indicatifs : ce qui compte, c’est que chaque marque de vos réglages soit couverte par une alerte du site. À refaire si vous ajoutez une marque dans Réglages.`),
         el('ul', { class: 'targeted-list' }, s.targeted.map((t) => el('li', {}, el('a', { href: t.url, target: '_blank', rel: 'noopener' }, svg('open'), t.label)))))) : null;
     return el('div', { class: 'site' },
       el('div', { class: 'shead' }, el('h3', {}, s.label), status),
