@@ -3,6 +3,10 @@ import type { AnyNode, Element } from 'domhandler';
 import type { RawListing, SellerType } from '../../types.js';
 import { cleanText, parseKm, parseLocation, parsePrice, parseYear } from '../../listings/normalize.js';
 import { listingRef, SITES, siteForHost, siteForSender, unwrapTrackingUrl, type ListingRef, type SiteDef } from '../sites.js';
+import { announcedCount, classifyEmail, type EmailKind, isDigestOfOlderAds } from '../../domain/sites/emailKind.js';
+import { parseDepartment } from '../../domain/parsing/department.js';
+
+export { announcedCount, classifyEmail, type EmailKind, isDigestOfOlderAds } from '../../domain/sites/emailKind.js';
 
 export interface EmailInput {
   html?: string;
@@ -15,9 +19,6 @@ export interface EmailInput {
 
 export interface PendingLink { href: string; text: string }
 
-/** What the email is about: fresh ads, price drops on known ads, a reminder, a recap of the week… */
-export type EmailKind = 'new' | 'price_drop' | 'reminder' | 'recap' | 'other';
-
 export interface ParsedEmail {
   site?: string;
   kind: EmailKind;
@@ -25,35 +26,9 @@ export interface ParsedEmail {
   /** Tracking links that could not be unwrapped offline; resolve them over HTTP then call parse again with `resolved`. */
   pending: PendingLink[];
   ignored: number;
-  /** Number of ads the subject announces ("61 nouveaux véhicules…"), when the body shows only a preview. */
   announced?: number;
   /** The email's own link to the full list on the site ("Voir toutes les annonces"). */
   moreUrl?: string;
-}
-
-const KIND_PATTERNS: Array<[EmailKind, RegExp]> = [
-  ['price_drop', /baisses? de prix|prix en baisse|nouveau prix|price drop/i],
-  ['reminder', /toujours int[ée]ress|encore disponible|vous avez consult|n[’']oubliez pas|toujours disponible/i],
-  ['recap', /r[ée]capitulatif|r[ée]sum[ée]|hebdo|de la semaine|digest|s[ée]lection|recommand|vous avez manqu|coups? de c[œo]ur/i],
-  ['new', /nouvelle?s? annonces?|nouveaux? v[ée]hicules?|nouveaux? r[ée]sultats?|nouvelle?s? offres?|correspond(ent)? [àa] (votre|ta) recherche|nouvelle annonce/i],
-];
-
-export function classifyEmail(subject?: string): EmailKind {
-  if (!subject) return 'other';
-  for (const [kind, re] of KIND_PATTERNS) if (re.test(subject)) return kind;
-  return 'other';
-}
-
-/** Emails that revisit ads published earlier (price drops, reminders, weekly recaps). */
-export function isDigestOfOlderAds(subject?: string): boolean {
-  const k = classifyEmail(subject);
-  return k === 'price_drop' || k === 'reminder' || k === 'recap';
-}
-
-/** The number of ads an alert email announces in its subject ("61 nouveaux véhicules…", "3 nouvelles annonces"). */
-export function announcedCount(subject?: string): number | undefined {
-  const m = subject ? /(\d{1,4})\s+nouve(?:aux?|lles?)\s+(?:annonces?|v[ée]hicules?|r[ée]sultats?|offres?)/i.exec(subject) : null;
-  return m ? Number(m[1]) : undefined;
 }
 
 /** A link to the full list of results on the site, by its wording ("Voir toutes les annonces", "Je découvre…"). */
@@ -243,27 +218,6 @@ function climb($: cheerio.CheerioAPI, start: AnyNode, key: string, keyOf: (el: E
 
 /** A line of specs ("Coupé - Essence - Année 2011 - 75 000 km", "10 500 €") is not a title. */
 const SPEC_LINE = /(\d[\d ]*\s?(€|km\b))|\bann[ée]e\s*:?\s*\d{4}\b|^\d{4}\b/i;
-
-/** "Vendeur particulier 33": a bare département number closing the block (La Centrale). */
-function parseDepartment(text: string): { city: string; postalCode: string } | undefined {
-  const m = /(?:vendeur\s+(?:particulier|professionnel|pro)\s+|\s)(0[1-9]|[1-8]\d|9[0-5])\s*$/i.exec(cleanText(text));
-  if (!m || m[1] === undefined) return undefined;
-  const name = DEPARTMENTS[m[1]];
-  return name ? { city: `${name} (${m[1]})`, postalCode: m[1] } : undefined;
-}
-
-const DEPARTMENTS: Record<string, string> = {
-  '01': 'Ain', '02': 'Aisne', '03': 'Allier', '04': 'Alpes-de-Haute-Provence', '05': 'Hautes-Alpes', '06': 'Alpes-Maritimes', '07': 'Ardèche', '08': 'Ardennes', '09': 'Ariège',
-  '10': 'Aube', '11': 'Aude', '12': 'Aveyron', '13': 'Bouches-du-Rhône', '14': 'Calvados', '15': 'Cantal', '16': 'Charente', '17': 'Charente-Maritime', '18': 'Cher', '19': 'Corrèze',
-  '21': 'Côte-d’Or', '22': 'Côtes-d’Armor', '23': 'Creuse', '24': 'Dordogne', '25': 'Doubs', '26': 'Drôme', '27': 'Eure', '28': 'Eure-et-Loir', '29': 'Finistère',
-  '30': 'Gard', '31': 'Haute-Garonne', '32': 'Gers', '33': 'Gironde', '34': 'Hérault', '35': 'Ille-et-Vilaine', '36': 'Indre', '37': 'Indre-et-Loire', '38': 'Isère', '39': 'Jura',
-  '40': 'Landes', '41': 'Loir-et-Cher', '42': 'Loire', '43': 'Haute-Loire', '44': 'Loire-Atlantique', '45': 'Loiret', '46': 'Lot', '47': 'Lot-et-Garonne', '48': 'Lozère', '49': 'Maine-et-Loire',
-  '50': 'Manche', '51': 'Marne', '52': 'Haute-Marne', '53': 'Mayenne', '54': 'Meurthe-et-Moselle', '55': 'Meuse', '56': 'Morbihan', '57': 'Moselle', '58': 'Nièvre', '59': 'Nord',
-  '60': 'Oise', '61': 'Orne', '62': 'Pas-de-Calais', '63': 'Puy-de-Dôme', '64': 'Pyrénées-Atlantiques', '65': 'Hautes-Pyrénées', '66': 'Pyrénées-Orientales', '67': 'Bas-Rhin', '68': 'Haut-Rhin', '69': 'Rhône',
-  '70': 'Haute-Saône', '71': 'Saône-et-Loire', '72': 'Sarthe', '73': 'Savoie', '74': 'Haute-Savoie', '75': 'Paris', '76': 'Seine-Maritime', '77': 'Seine-et-Marne', '78': 'Yvelines', '79': 'Deux-Sèvres',
-  '80': 'Somme', '81': 'Tarn', '82': 'Tarn-et-Garonne', '83': 'Var', '84': 'Vaucluse', '85': 'Vendée', '86': 'Vienne', '87': 'Haute-Vienne', '88': 'Vosges', '89': 'Yonne',
-  '90': 'Territoire de Belfort', '91': 'Essonne', '92': 'Hauts-de-Seine', '93': 'Seine-Saint-Denis', '94': 'Val-de-Marne', '95': 'Val-d’Oise',
-};
 
 function pickTitle($: cheerio.CheerioAPI, group: Anchor[], block: AnyNode[], blockText: string): string | undefined {
   const candidates = group.map((a) => a.text).filter((t) => t.length >= 6 && !CALL_TO_ACTION.test(t) && !/^https?:/i.test(t));

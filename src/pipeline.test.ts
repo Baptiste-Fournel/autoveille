@@ -141,14 +141,3 @@ describe('pipeline', () => {
     expect(await pipeline.repair(store.getSettings())).toMatchObject({ renamed: 0, split: 0, reevaluated: 0 });
   });
 });
-
-describe('alert confirmations', () => {
-  it('keeps the newest confirmation when an older email is read again', () => {
-    const store = new Store(':memory:');
-    store.recordAlert({ site: 'lacentrale', criteria: '200 km, 150 000 km', confirmedAt: '2026-10-14T20:00:00.000Z', radiusKm: 200, maxKm: 150000 });
-    store.recordAlert({ site: 'lacentrale', criteria: '100 km, 100 000 km', confirmedAt: '2026-10-14T15:33:00.000Z', radiusKm: 100, maxKm: 100000 });
-    expect(store.getSettings().alerts.lacentrale.radiusKm).toBe(200);
-    store.recordAlert({ site: 'lacentrale', criteria: '250 km', confirmedAt: '2026-10-15T09:00:00.000Z', radiusKm: 250, maxKm: 150000 });
-    expect(store.getSettings().alerts.lacentrale.radiusKm).toBe(250);
-  });
-});

@@ -4,15 +4,10 @@ import { geocode, haversineKm, type GeoCache, type GeocodeResult } from './geo/g
 import { evaluate } from './listings/filters.js';
 import { extractVehicleInfo, fingerprint, similar } from './listings/normalize.js';
 import { composeMessage } from './messages/templates.js';
-import type { Family, RawListing, Settings, VehicleInfo } from './types.js';
-import type { CustomBrand } from './listings/brands.js';
+import type { RawListing, Settings, VehicleInfo } from './types.js';
+import { customBrandsOf as customBrands } from './domain/settings/customBrands.js';
 
-/** Brands the person added in the settings that the code does not know. */
-export function customBrands(settings: Settings): CustomBrand[] {
-  const out: CustomBrand[] = [];
-  for (const f of Object.keys(settings.families) as Family[]) for (const b of settings.families[f].known) out.push({ name: b, family: f });
-  return out;
-}
+export { customBrands };
 
 export type IngestOutcome =
   | { kind: 'new'; vehicleId: number; matched: boolean; reasons: string[] }

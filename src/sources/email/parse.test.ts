@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { announcedCount, classifyEmail, parseAlertEmail } from './parse.js';
-import { listingRef, unwrapTrackingUrl } from '../sites.js';
+import { parseAlertEmail } from './parse.js';
 import { loadFixture } from '../../../tests/support/fixtures.js';
 
 const LBC_HTML = loadFixture('emails/leboncoin/trois-annonces-en-tableau.html');
@@ -28,27 +27,6 @@ describe('alert email parsing', () => {
     const second = parseAlertEmail({ html, from: 'alertes@info.lacentrale.fr' }, resolved);
     expect(second.listings).toHaveLength(1);
     expect(second.listings[0]).toMatchObject({ site: 'lacentrale', externalId: '69112345678', title: 'Mercedes-AMG C63 S Coupé', year: 2019, km: 45200, price: 64900, city: 'Libourne' });
-  });
-
-  it('unwraps destinations embedded in tracking urls', () => {
-    const u = unwrapTrackingUrl('https://links.notify.example.com/click?u=' + encodeURIComponent('https://www.leboncoin.fr/ad/voitures/555555?utm=1'));
-    expect(u).toEqual({ url: 'https://www.leboncoin.fr/ad/voitures/555555?utm=1', resolved: true });
-    expect(unwrapTrackingUrl('https://www.paruvendu.fr/a/voiture-occasion/porsche/911/1234567890A1B').resolved).toBe(true);
-    expect(unwrapTrackingUrl('https://t.paruvendu.fr/x/y').resolved).toBe(false);
-  });
-
-  it('recognises listing urls of known sites and unknown ones generically', () => {
-    expect(listingRef('https://www.autoscout24.fr/annonces/porsche-911-carrera-essence-noir-12345678-1234-1234-1234-123456789abc')?.id).toBe('12345678-1234-1234-1234-123456789abc');
-    // The slug before the uuid is full of dashes: the id must be the whole uuid, and tracking parameters go.
-    const offre = listingRef('https://www.autoscout24.fr/offres/bmw-z4-sdrive20i-197-ch-bvm6-essence-gris-cat_ma13mo18308-8723275b-cdc4-4a58-811d-ae9cef84c6f3?cldtidx=0&ap_tier=t30');
-    expect(offre?.id).toBe('8723275b-cdc4-4a58-811d-ae9cef84c6f3');
-    expect(offre?.url).toBe('https://www.autoscout24.fr/offres/bmw-z4-sdrive20i-197-ch-bvm6-essence-gris-cat_ma13mo18308-8723275b-cdc4-4a58-811d-ae9cef84c6f3');
-    expect(listingRef('https://www.autoscout24.fr/offres/8723275b-cdc4-4a58-811d-ae9cef84c6f3')?.id).toBe('8723275b-cdc4-4a58-811d-ae9cef84c6f3');
-    expect(listingRef('https://www.paruvendu.fr/a/voiture-occasion/porsche/911/1234567890A1B')?.id).toBe('1234567890A1B');
-    expect(listingRef('https://www.leboncoin.fr/recherches/123')).toBeUndefined();
-    const generic = listingRef('https://www.petit-site-auto.fr/annonce/porsche-911-carrera-4s-2015/987654');
-    expect(generic).toMatchObject({ site: 'petit-site-auto.fr', siteLabel: 'Petit-site-auto', id: '987654' });
-    expect(listingRef('https://www.petit-site-auto.fr/aide/contact/987654')).toBeUndefined();
   });
 
   it('parses a text-only alert', () => {
@@ -160,20 +138,5 @@ describe('digests of older ads', () => {
     const out = parseAlertEmail({ html: loadFixture('emails/petit-site-auto/deux-annonces-avec-la-meme-image-par-defaut.html'), from: 'alertes@petit-site-auto.fr', subject: '2 nouvelles annonces' });
     expect(out.listings).toHaveLength(2);
     expect(out.listings.every((l) => l.imageUrl === undefined)).toBe(true);
-  });
-});
-
-describe('email kinds', () => {
-  it('tells fresh ads, price drops, reminders and recaps apart from the subject, on any site', () => {
-    expect(classifyEmail('61 nouveaux véhicules correspondent à votre recherche')).toBe('new');
-    expect(classifyEmail('🚗 1 nouvelle annonce - Voiture d’occasion / Bordeaux')).toBe('new');
-    expect(classifyEmail('Profil de recherche 14/10/2026 : 2 nouveaux résultats')).toBe('new');
-    expect(classifyEmail('↘️ 108 baisses de prix sur votre alerte')).toBe('price_drop');
-    expect(classifyEmail('Toujours intéressé par "Audi TT - 39900 €" ?')).toBe('reminder');
-    expect(classifyEmail('Votre récapitulatif de la semaine')).toBe('recap');
-    expect(classifyEmail('Confirmation de la création de votre alerte')).toBe('other');
-    expect(announcedCount('61 nouveaux véhicules correspondent à votre recherche')).toBe(61);
-    expect(announcedCount('🚗 1 nouvelle annonce - Voiture')).toBe(1);
-    expect(announcedCount('Toujours intéressé ?')).toBeUndefined();
   });
 });

@@ -6,6 +6,9 @@ import type { AppNotifier } from './notify/notify.js';
 import type { Scheduler } from './scheduler.js';
 import { geocode } from './geo/geo.js';
 import { mergeSettings } from './listings/defaults.js';
+import { InvalidSettings } from './domain/settings/invalidSettings.js';
+import { sanitizeSettings } from './domain/settings/sanitize.js';
+import { settingsProblemText, zoneWarningText } from './domain/presentation/settings.js';
 import { reasonKind, specialReason } from './listings/filters.js';
 import { extractVehicleInfo } from './listings/normalize.js';
 import { customBrands } from './pipeline.js';
@@ -149,9 +152,9 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     const changed = next.zone.city !== current.zone.city || next.zone.postalCode !== current.zone.postalCode || next.zone.lat === null;
     if (!changed) return undefined;
     const g = await geocode(next.zone.city, next.zone.postalCode || undefined);
-    if (!g) { next.zone.lat = null; next.zone.lon = null; return 'Ville introuvable : le filtre de distance est désactivé tant que la ville n’est pas reconnue.'; }
+    if (!g) { next.zone.lat = null; next.zone.lon = null; return zoneWarningText('cityNotFound'); }
     next.zone.lat = g.lat; next.zone.lon = g.lon;
-    return g.precision === 'departement' ? 'Ville non reconnue précisément : distance calculée depuis le centre du département.' : undefined;
+    return g.precision === 'departement' ? zoneWarningText('cityLocatedByDepartment') : undefined;
   };
 
   app.put<{ Body: Partial<Settings> }>('/api/settings', async (req, reply) => {
@@ -354,32 +357,15 @@ function maskSettings(s: Settings): Settings {
   return { ...s, imap: { ...s.imap, pass: s.imap.pass ? '••••••••' : '' } };
 }
 
-/** Light validation; keeps secrets the UI sends back masked. Returns an error message as a string. */
+function restoreMaskedSecrets(next: Settings, current: Settings): Settings {
+  return {
+    ...next,
+    imap: { ...next.imap, pass: next.imap.pass === '••••••••' ? current.imap.pass : next.imap.pass },
+    notifications: { ...next.notifications, telegramToken: next.notifications.telegramToken === '••••••••' ? current.notifications.telegramToken : next.notifications.telegramToken },
+  };
+}
+
 function sanitize(next: Settings, current: Settings): Settings | string {
-  if (next.imap.pass === '••••••••') next.imap.pass = current.imap.pass;
-  if (next.notifications.telegramToken === '••••••••') next.notifications.telegramToken = current.notifications.telegramToken;
-  next.maxKm = Math.max(0, Math.round(Number(next.maxKm) || 0));
-  next.zone.radiusKm = Math.max(0, Math.round(Number(next.zone.radiusKm) || 0));
-  next.zone.city = String(next.zone.city ?? '').trim();
-  next.zone.postalCode = String(next.zone.postalCode ?? '').trim();
-  if (!next.zone.city && !next.zone.postalCode) return 'Indiquez la ville de la zone.';
-  for (const f of Object.keys(next.families) as Family[]) {
-    const r = next.families[f];
-    r.minPrice = Math.max(0, Math.round(Number(r.minPrice) || 0));
-    r.maxYear = Math.max(0, Math.round(Number(r.maxYear) || 0));
-    r.keywords = (r.keywords ?? []).map((k) => String(k).trim()).filter(Boolean);
-    r.brands = (r.brands ?? []).map((k) => String(k).trim()).filter(Boolean);
-    r.known = Array.from(new Set([...(r.known ?? []), ...r.brands].map((k) => String(k).trim()).filter(Boolean)));
-  }
-  for (const f of Object.keys(next.templates) as Family[]) {
-    next.templates[f].variants = (next.templates[f].variants ?? []).map((v) => String(v).replace(/\r\n/g, '\n').trim()).filter(Boolean);
-  }
-  next.httpSites = (next.httpSites ?? []).map((s) => ({ id: s.id || Math.random().toString(36).slice(2, 10), name: String(s.name ?? '').trim() || 'Site', url: String(s.url ?? '').trim(), enabled: s.enabled !== false }));
-  next.imap.port = Number(next.imap.port) || 993;
-  // Confirmations recorded from the mailbox are kept even when a client sends settings loaded before they arrived.
-  const alerts = { ...current.alerts, ...(next.alerts ?? {}) };
-  next.alerts = Object.fromEntries(Object.entries(alerts).filter(([, v]) => v && typeof v === 'object' && typeof v.criteria === 'string').map(([k, v]) => [String(k).slice(0, 40), { ...v, site: String(k).slice(0, 40), criteria: String(v.criteria).slice(0, 300), manageUrl: v.manageUrl && /^https?:/i.test(v.manageUrl) ? v.manageUrl.slice(0, 500) : undefined }]));
-  next.alertsDone = Object.fromEntries(Object.entries(next.alertsDone ?? {}).filter(([, v]) => v === true).map(([k]) => [String(k).slice(0, 40), true]));
-  for (const k of Object.keys(next.alerts)) next.alertsDone[k] = true;
-  return next;
+  const out = sanitizeSettings(restoreMaskedSecrets(next, current), current, () => Math.random().toString(36).slice(2, 10));
+  return out instanceof InvalidSettings ? settingsProblemText(out.problem) : out;
 }

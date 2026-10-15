@@ -3,45 +3,13 @@ import type { RawListing } from '../types.js';
 import { parseAlertEmail } from './email/parse.js';
 import { parseKm, parsePrice, parseYear, parseLocation, cleanText } from '../listings/normalize.js';
 import { listingRef, prettyHost } from './sites.js';
+import { robotsAllows } from '../domain/sites/robots.js';
+
+export { robotsAllows } from '../domain/sites/robots.js';
 
 export const USER_AGENT = 'AutoVeille/1.0 (veille d\'annonces; respecte robots.txt)';
 
 export interface HttpSiteResult { ok: boolean; detail: string; listings: RawListing[] }
-
-/** Minimal robots.txt check for our user agent and for "*". Prefix rules with "*" and "$" wildcards. */
-export function robotsAllows(robotsTxt: string, path: string, agent = 'autoveille'): boolean {
-  const groups: Array<{ agents: string[]; rules: Array<{ allow: boolean; pattern: string }> }> = [];
-  let current: { agents: string[]; rules: Array<{ allow: boolean; pattern: string }> } | null = null;
-  let lastWasAgent = false;
-  for (const raw of robotsTxt.split(/\r?\n/)) {
-    const line = raw.replace(/#.*$/, '').trim();
-    if (!line) continue;
-    const m = /^([a-z-]+)\s*:\s*(.*)$/i.exec(line);
-    if (!m || m[1] === undefined || m[2] === undefined) continue;
-    const key = m[1].toLowerCase(), value = m[2].trim();
-    if (key === 'user-agent') {
-      if (!current || !lastWasAgent) { current = { agents: [], rules: [] }; groups.push(current); }
-      current.agents.push(value.toLowerCase());
-      lastWasAgent = true;
-    } else if ((key === 'allow' || key === 'disallow') && current) {
-      current.rules.push({ allow: key === 'allow', pattern: value });
-      lastWasAgent = false;
-    } else {
-      lastWasAgent = false;
-    }
-  }
-  const specific = groups.filter((g) => g.agents.some((a) => a !== '*' && agent.includes(a)));
-  const applicable = specific.length ? specific : groups.filter((g) => g.agents.includes('*'));
-  let best: { allow: boolean; len: number } | null = null;
-  for (const g of applicable) {
-    for (const r of g.rules) {
-      if (r.pattern === '') { if (!r.allow && !best) best = { allow: true, len: 0 }; continue; }
-      const re = new RegExp('^' + r.pattern.split('*').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*').replace(/\\\$$/, '$'));
-      if (re.test(path) && (!best || r.pattern.length > best.len)) best = { allow: r.allow, len: r.pattern.length };
-    }
-  }
-  return best ? best.allow : true;
-}
 
 interface JsonLdNode { [k: string]: unknown }
 

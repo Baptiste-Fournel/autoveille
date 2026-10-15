@@ -62,12 +62,16 @@
         "src/pipeline.ts",
         "src/scheduler.ts",
         "src/server.ts",
-        "src/types.ts",
         "src/cli/demo.ts",
         "src/cli/parse-email.ts",
-        "src/listings/**",
-        "src/messages/**",
-        "src/sources/**",
+        "src/sources/email/confirmations.test.ts",
+        "src/sources/email/confirmations.ts",
+        "src/sources/email/imap.ts",
+        "src/sources/email/parse.test.ts",
+        "src/sources/email/parse.ts",
+        "src/sources/http.test.ts",
+        "src/sources/http.ts",
+        "src/sources/sites.ts",
         "src/geo/**",
         "src/notify/**",
         "public/app.js",
@@ -104,7 +108,6 @@
           },
           "suspicious": {
             "noAssignInExpressions": "off",
-            "noMisleadingCharacterClass": "off",
             "useIterableCallbackReturn": "off"
           }
         }

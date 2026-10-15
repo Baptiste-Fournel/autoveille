@@ -1,20 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { fetchSite, listingsFromJsonLd, robotsAllows } from './http.js';
+import { fetchSite, listingsFromJsonLd } from './http.js';
 import { loadFixture } from '../../tests/support/fixtures.js';
-
-describe('robots.txt', () => {
-  const robots = loadFixture('pages/robots-groupe-general-et-robot-exclu.txt');
-  it('applies the * group when no specific group matches', () => {
-    expect(robotsAllows(robots, '/voiture-occasion/porsche')).toBe(true);
-    expect(robotsAllows(robots, '/compte/alertes')).toBe(false);
-    expect(robotsAllows(robots, '/recherche?x=1')).toBe(false);
-    expect(robotsAllows(robots, '/recherche/public')).toBe(true);
-  });
-  it('blocks everything when Disallow: / applies', () => {
-    expect(robotsAllows('User-agent: *\nDisallow: /', '/a')).toBe(false);
-    expect(robotsAllows('User-agent: *\nDisallow:', '/a')).toBe(true);
-  });
-});
 
 describe('json-ld', () => {
   it('reads schema.org Car items from a results page', () => {
@@ -54,35 +40,5 @@ describe('fetchSite', () => {
     expect(r.ok).toBe(true);
     expect(r.listings.map((l) => l.title)).toEqual(['BMW M3 Compétition', 'Ferrari F430 F1']);
     expect(r.listings[1]).toMatchObject({ externalId: '888888', price: 119000, km: 31000, year: 2006, city: 'Pessac' });
-  });
-});
-
-import { targetedSearches } from './links.js';
-import { Store } from '../db.js';
-
-describe('targeted La Centrale searches', () => {
-  it('splits the followed brands into alerts of three at most, with a softer price floor', () => {
-    const s = new Store(':memory:').getSettings();
-    s.families.allemandes = { ...s.families.allemandes, enabled: true, brands: ['Porsche', 'Mercedes-Benz', 'BMW', 'Audi', 'Alpina'], minPrice: 40000, maxYear: 1995 };
-    s.families.italiennes = { ...s.families.italiennes, enabled: true, brands: ['Ferrari', 'Lamborghini', 'Maserati', 'Pagani', 'Alfa Romeo', 'Lancia', 'De Tomaso'], minPrice: 30000, maxYear: 1995 };
-    s.families.americaines = { ...s.families.americaines, enabled: true, brands: ['Ford', 'Chevrolet', 'Dodge', 'Jeep'], minPrice: 15000, maxYear: 1995 };
-    s.families.francaises = { ...s.families.francaises, enabled: false };
-    const out = targetedSearches(s);
-    expect(out.every((t) => t.brands.length <= 3)).toBe(true);
-    expect(out.find((t) => t.brands[0] === 'PORSCHE')?.minPrice).toBe(30000);
-    expect(out.find((t) => t.brands.includes('MERCEDES'))?.brands).toEqual(['MERCEDES']);
-    expect(out.find((t) => t.brands.includes('FERRARI'))?.brands).toEqual(['FERRARI', 'LAMBORGHINI', 'MASERATI']);
-    expect(out.find((t) => t.brands.includes('FORD:MUSTANG'))?.url).toContain('FORD%3AMUSTANG%3BCHEVROLET%3BDODGE');
-    expect(out.find((t) => t.brands.includes('JEEP'))?.minPrice).toBe(10000);
-    // Labels keep the brand names as written in the settings, not the site's upper-case codes.
-    expect(out.find((t) => t.brands[0] === 'BMW')?.label).toMatch(/^BMW à partir de 30/);
-    expect(out.find((t) => t.brands.includes('LANCIA'))?.label).toContain('Pagani, Alfa Romeo, Lancia');
-    expect(out.find((t) => t.brands.includes('DE TOMASO'))?.label).toMatch(/^De Tomaso à partir de 20/);
-    expect(out.find((t) => t.brands.includes('FORD:MUSTANG'))?.label).toMatch(/^Ford Mustang, Chevrolet, Dodge/);
-    expect(out.find((t) => t.brands.includes('FORD:BRONCO'))).toMatchObject({ brands: ['FORD:GT', 'FORD:BRONCO', 'FORD:F-150'], minPrice: 10000 });
-    expect(out.find((t) => t.brands.includes('FORD:BRONCO'))?.label).toMatch(/^Ford GT, Ford Bronco, Ford F-150/);
-    expect(out[out.length - 1]).toMatchObject({ maxYear: 1995 });
-    expect(out[out.length - 1].url).toContain('yearMax=1995');
-    expect(out.every((t) => t.url.includes('customerFamilyCodes=PART') && t.url.includes('distance=5'))).toBe(true);
   });
 });

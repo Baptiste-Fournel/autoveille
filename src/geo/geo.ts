@@ -1,19 +1,10 @@
 /** Distance and geocoding. Online: geo.api.gouv.fr (official, free). Offline fallback: built-in cities and département centroids. */
 
-export interface LatLon { lat: number; lon: number }
+import type { LatLon } from '../domain/geo/distance.js';
+import { fold } from '../domain/parsing/text.js';
 
-export function haversineKm(a: LatLon, b: LatLon): number {
-  const R = 6371;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLon = toRad(b.lon - a.lon);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-function fold(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
+export type { LatLon } from '../domain/geo/distance.js';
+export { haversineKm } from '../domain/geo/distance.js';
 
 // Approximate centroids, good enough for a 50 to 150 km radius decision.
 const CITIES: Record<string, [number, number]> = {

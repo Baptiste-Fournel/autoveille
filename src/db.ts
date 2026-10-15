@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { AlertInfo, Family, RawListing, SellerType, Settings, Status } from './types.js';
 import { defaultSettings, mergeSettings } from './listings/defaults.js';
+import { recordAlertConfirmation } from './domain/settings/alerts.js';
 
 export interface VehicleRow {
   id: number;
@@ -242,15 +243,10 @@ export class Store {
     return { received, contacted, replied };
   }
 
-  /** A site confirmed its alert by email: tick the site and keep what it said. */
-  /** Keeps what a site last said about its alert; an older confirmation (a mailbox read again) never replaces a newer one. */
   recordAlert(info: AlertInfo): void {
     const s = this.getSettings();
-    const current = s.alerts[info.site];
-    if (current?.confirmedAt && info.confirmedAt && info.confirmedAt < current.confirmedAt) return;
-    s.alertsDone = { ...s.alertsDone, [info.site]: true };
-    s.alerts = { ...s.alerts, [info.site]: info };
-    this.saveSettings(s);
+    const next = recordAlertConfirmation(s, info);
+    if (next !== s) this.saveSettings(next);
   }
 
   /** Forget which emails were read, so the next check reads the mailbox again from the start. */
