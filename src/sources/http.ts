@@ -1,15 +1,15 @@
 import * as cheerio from 'cheerio';
+import type { FetchedPage, PageReading } from '../application/ports/listingExtractor.js';
+import type { SiteFetcher, SitePage } from '../application/ports/siteFetcher.js';
 import type { RawListing } from '../types.js';
 import { parseAlertEmail } from './email/parse.js';
-import { parseKm, parsePrice, parseYear, parseLocation, cleanText } from '../listings/normalize.js';
+import { parsePrice, parseYear, parseLocation, cleanText } from '../listings/normalize.js';
 import { listingRef, prettyHost } from './sites.js';
 import { robotsAllows } from '../domain/sites/robots.js';
 
 export { robotsAllows } from '../domain/sites/robots.js';
 
 export const USER_AGENT = 'AutoVeille/1.0 (veille d\'annonces; respecte robots.txt)';
-
-export interface HttpSiteResult { ok: boolean; detail: string; listings: RawListing[] }
 
 interface JsonLdNode { [k: string]: unknown }
 
@@ -81,54 +81,65 @@ function absolutize(html: string, pageUrl: string): string {
   return $.html();
 }
 
-/**
- * Read a search results page from a site that allows it. One plain request, identified as ourselves,
- * robots.txt honoured, no retry on refusal. Returns a clear French status for the Sources screen.
- */
-export async function fetchSite(url: string, fetchImpl: typeof fetch = fetch): Promise<HttpSiteResult> {
-  let u: URL;
-  try { u = new URL(url); } catch { return { ok: false, detail: 'Adresse invalide.', listings: [] }; }
-  const headers = { 'user-agent': USER_AGENT, accept: 'text/html,application/xhtml+xml', 'accept-language': 'fr-FR,fr;q=0.9' };
-  const timeout = (ms: number) => { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; };
+const ANTI_BOT_PAGE = /<title>[^<]*(access denied|just a moment|attention required|captcha|vérification)/i;
 
+const REFUSED_STATUSES = [401, 403, 429];
+
+const ROBOTS_TIMEOUT_MS = 8_000;
+
+const PAGE_TIMEOUT_MS = 15_000;
+
+const PAGE_HEADERS = { 'user-agent': USER_AGENT, accept: 'text/html,application/xhtml+xml', 'accept-language': 'fr-FR,fr;q=0.9' };
+
+const abortAfter = (ms: number): AbortSignal => {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+};
+
+const robotsForbid = async (page: URL, fetchImpl: typeof fetch): Promise<boolean> => {
   try {
-    const robots = await fetchImpl(`${u.origin}/robots.txt`, { headers, signal: timeout(8000) });
-    if (robots.ok) {
-      const txt = await robots.text();
-      if (!robotsAllows(txt, u.pathname + u.search)) {
-        return { ok: false, detail: 'Le robots.txt du site interdit la lecture automatique de cette page. Utilisez l’alerte email du site à la place.', listings: [] };
-      }
-    }
+    const robots = await fetchImpl(`${page.origin}/robots.txt`, { headers: PAGE_HEADERS, signal: abortAfter(ROBOTS_TIMEOUT_MS) });
+    return robots.ok && !robotsAllows(await robots.text(), page.pathname + page.search);
   } catch {
-    // No robots.txt reachable: proceed with the page request, which will tell us more.
+    return false;
   }
+};
 
-  let res: Response;
-  try {
-    res = await fetchImpl(u.toString(), { headers, signal: timeout(15000) });
-  } catch (err) {
-    return { ok: false, detail: `Site injoignable (${err instanceof Error ? err.message : String(err)}).`, listings: [] };
-  }
-  if (res.status === 403 || res.status === 429 || res.status === 401) {
-    return { ok: false, detail: `Le site refuse les lectures automatiques (HTTP ${res.status}). Utilisez l’alerte email du site à la place.`, listings: [] };
-  }
-  if (!res.ok) return { ok: false, detail: `Réponse inattendue du site (HTTP ${res.status}).`, listings: [] };
-  const html = await res.text();
-  if (/<title>[^<]*(access denied|just a moment|attention required|captcha|vérification)/i.test(html)) {
-    return { ok: false, detail: 'Le site présente une page de vérification anti-robot. Utilisez l’alerte email du site à la place.', listings: [] };
-  }
+const requested = (page: URL, fetchImpl: typeof fetch): Promise<{ readonly response: Response } | { readonly failure: string }> =>
+  fetchImpl(page.toString(), { headers: PAGE_HEADERS, signal: abortAfter(PAGE_TIMEOUT_MS) }).then(
+    (response) => ({ response }),
+    (error: unknown) => ({ failure: error instanceof Error ? error.message : String(error) }),
+  );
 
-  let listings = listingsFromJsonLd(html, u.toString());
-  let method = 'données structurées';
-  if (!listings.length) {
-    listings = parseAlertEmail({ html: absolutize(html, u.toString()) }).listings;
-    method = 'lecture des liens';
-    // Only keep listings from this host
-    listings = listings.filter((l) => { try { return new URL(l.url).hostname.replace(/^www\./, '') === u.hostname.replace(/^www\./, ''); } catch { return false; } });
-  }
-  for (const l of listings) { if (!l.siteLabel) l.siteLabel = prettyHost(u.hostname); }
-  // The page text usually carries no explicit "particulier": leave unknown rather than guessing.
-  return { ok: true, detail: `${listings.length} annonce(s) lue(s) (${method}).`, listings };
+export async function fetchPage(url: string, fetchImpl: typeof fetch): Promise<SitePage> {
+  if (!URL.canParse(url)) return { kind: 'invalidAddress' };
+  const page = new URL(url);
+  if (await robotsForbid(page, fetchImpl)) return { kind: 'disallowedByRobots' };
+  const answer = await requested(page, fetchImpl);
+  if ('failure' in answer) return { kind: 'unreachable', message: answer.failure };
+  const { response } = answer;
+  if (REFUSED_STATUSES.includes(response.status)) return { kind: 'refused', status: response.status };
+  if (!response.ok) return { kind: 'unexpectedStatus', status: response.status };
+  const html = await response.text();
+  if (ANTI_BOT_PAGE.test(html)) return { kind: 'antiBotPage' };
+  return { kind: 'page', url: page.toString(), html };
 }
 
-export { parseKm };
+export const httpSiteFetcher = (fetchImpl?: typeof fetch): SiteFetcher => ({
+  fetchPage: (url) => fetchPage(url, fetchImpl ?? fetch),
+});
+
+const hostOf = (url: string): string | undefined => (URL.canParse(url) ? new URL(url).hostname.replace(/^www\./, '') : undefined);
+
+const withSiteLabel = (listings: readonly RawListing[], hostname: string): readonly RawListing[] =>
+  listings.map((listing) => (listing.siteLabel ? listing : { ...listing, siteLabel: prettyHost(hostname) }));
+
+export function listingsFromPage(page: FetchedPage): PageReading {
+  const { hostname } = new URL(page.url);
+  const structured = listingsFromJsonLd(page.html, page.url);
+  if (structured.length) return { listings: withSiteLabel(structured, hostname), method: 'structuredData' };
+  const pageHost = hostname.replace(/^www\./, '');
+  const linked = parseAlertEmail({ html: absolutize(page.html, page.url) }).listings.filter((listing) => hostOf(listing.url) === pageHost);
+  return { listings: withSiteLabel(linked, hostname), method: 'links' };
+}

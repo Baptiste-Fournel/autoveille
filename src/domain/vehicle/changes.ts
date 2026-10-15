@@ -4,7 +4,15 @@ import type { Listing, RawListing, Vehicle, VehicleInfo } from './types.js';
 
 export type NewVehicle = Omit<Vehicle, 'id'>;
 
-export type VehicleChanges = Partial<NewVehicle>;
+export type VehicleSightingChanges = Partial<
+  Pick<Vehicle, 'price' | 'priceDropped' | 'km' | 'year' | 'publishedAt' | 'reposted' | 'matched' | 'rejections' | 'lastSeenAt'>
+>;
+
+export type RegroupingChanges = Partial<Pick<Vehicle, 'make' | 'model' | 'family' | 'fingerprint' | 'reposted' | 'matched' | 'rejections'>>;
+
+export type VehicleUpdateChanges = Partial<
+  Pick<Vehicle, 'status' | 'doNotContact' | 'messageOverride' | 'note' | 'matched' | 'rejections'>
+>;
 
 export type NewListing = Omit<Listing, 'id' | 'vehicleId'>;
 

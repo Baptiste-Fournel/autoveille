@@ -1,7 +1,15 @@
 import { evaluate } from '../filtering/evaluate.js';
 import type { Verdict } from '../filtering/verdict.js';
 import type { Settings } from '../settings/types.js';
-import { type ListingChanges, type NewListing, type NewVehicle, newListing, newVehicle, type VehicleChanges } from '../vehicle/changes.js';
+import {
+  type ListingChanges,
+  type NewListing,
+  type NewVehicle,
+  newListing,
+  newVehicle,
+  type VehicleSightingChanges,
+} from '../vehicle/changes.js';
+import { earlierPublishedAt } from '../vehicle/earlierPublishedAt.js';
 import { EVENT_TYPES, type NewVehicleEvent, priceChangeDetail, sightingDetail } from '../vehicle/events.js';
 import { isAwaitingDecision } from '../vehicle/status.js';
 import type { Listing, PricePoint, RawListing, Vehicle, VehicleInfo } from '../vehicle/types.js';
@@ -25,7 +33,7 @@ export interface PriceChanged {
   readonly to: number;
   readonly pricePoint: PricePoint;
   readonly listingChanges: ListingChanges;
-  readonly vehicleChanges: VehicleChanges;
+  readonly vehicleChanges: VehicleSightingChanges;
   readonly vehicle: Vehicle;
   readonly event: NewVehicleEvent;
 }
@@ -35,7 +43,7 @@ export interface SeenAgain {
   readonly vehicleId: number;
   readonly listingId: number;
   readonly listingChanges: ListingChanges;
-  readonly vehicleChanges: VehicleChanges;
+  readonly vehicleChanges: VehicleSightingChanges;
   readonly verdict: Verdict | undefined;
 }
 
@@ -45,7 +53,7 @@ export interface AttachedToVehicle {
   readonly vehicleId: number;
   readonly newListing: NewListing;
   readonly pricePoint: PricePoint | undefined;
-  readonly vehicleChanges: VehicleChanges;
+  readonly vehicleChanges: VehicleSightingChanges;
   readonly event: NewVehicleEvent;
 }
 
@@ -68,10 +76,7 @@ const completedFromTitle = (raw: RawListing, info: VehicleInfo): RawListing => (
   year: raw.year ?? info.year,
 });
 
-const earlierPublishedAt = (current: string | null, candidate: string | undefined): string | undefined =>
-  candidate && (!current || candidate < current) ? candidate : undefined;
-
-const publishedAtChange = (current: string | null, candidate: string | undefined): VehicleChanges => {
+const publishedAtChange = (current: string | null, candidate: string | undefined): VehicleSightingChanges => {
   const publishedAt = earlierPublishedAt(current, candidate);
   return publishedAt === undefined ? {} : { publishedAt };
 };
@@ -105,7 +110,7 @@ const listingCompletions = (completed: RawListing, listing: Listing, now: string
   lastSeenAt: now,
 });
 
-const vehicleCompletions = (completed: RawListing, vehicle: Vehicle): VehicleChanges => ({
+const vehicleCompletions = (completed: RawListing, vehicle: Vehicle): VehicleSightingChanges => ({
   ...(vehicle.price === null && completed.price !== undefined ? { price: completed.price } : {}),
   ...(vehicle.km === null && completed.km !== undefined ? { km: completed.km } : {}),
   ...(vehicle.year === null && completed.year !== undefined ? { year: completed.year } : {}),

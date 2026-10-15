@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { AlertInfo, Family, RawListing, SellerType, Settings, Status } from './types.js';
+import type { AlertInfo, Family, SellerType, Settings, Status } from './types.js';
 import { defaultSettings, mergeSettings } from './listings/defaults.js';
 import { recordAlertConfirmation } from './domain/settings/alerts.js';
 
@@ -59,6 +59,8 @@ export interface ListingRow {
 }
 
 export interface EventRow { id: number; vehicle_id: number; type: string; detail: string | null; at: string }
+
+export interface EmailRow { message_id: string; uid: number | null; subject: string; sender: string; received_at: string | null; site: string | null; parsed_count: number; parsed_json: string | null; error: string | null; processed_at: string }
 
 export class Store {
   readonly db: Database.Database;
@@ -165,14 +167,7 @@ export class Store {
   insertListing(l: Omit<ListingRow, 'id'>): number {
     const r = this.db.prepare(`INSERT INTO listings (vehicle_id, site, site_label, external_id, url, title, price, km, year, city, postal_code, seller_type, image_url, description, published_at, source_ref, first_seen_at, last_seen_at)
       VALUES (@vehicle_id, @site, @site_label, @external_id, @url, @title, @price, @km, @year, @city, @postal_code, @seller_type, @image_url, @description, @published_at, @source_ref, @first_seen_at, @last_seen_at)`).run(l);
-    const id = Number(r.lastInsertRowid);
-    if (l.price !== null && l.price !== undefined) this.db.prepare('INSERT INTO price_history(listing_id, price, seen_at) VALUES (?, ?, ?)').run(id, l.price, l.first_seen_at);
-    return id;
-  }
-
-  touchListing(id: number, at: string, price: number | null): void {
-    this.db.prepare('UPDATE listings SET last_seen_at = ?, price = COALESCE(?, price) WHERE id = ?').run(at, price, id);
-    this.db.prepare('UPDATE vehicles SET last_seen_at = ? WHERE id = (SELECT vehicle_id FROM listings WHERE id = ?)').run(at, id);
+    return Number(r.lastInsertRowid);
   }
 
   recordPrice(listingId: number, price: number, at: string): void {
@@ -205,18 +200,6 @@ export class Store {
     this.db.prepare(`UPDATE listings SET ${sets} WHERE id = @id`).run({ ...patch, id });
   }
 
-  /**
-   * Records the date a known listing went online on its site. The site is the authority for its own
-   * listing; the vehicle keeps the earliest date among its listings. Returns false for an unknown listing.
-   */
-  setPublishedAt(site: string, externalId: string, publishedAt: string): boolean {
-    const listing = this.findListing(site, externalId);
-    if (!listing) return false;
-    this.db.prepare('UPDATE listings SET published_at = ? WHERE id = ?').run(publishedAt, listing.id);
-    this.db.prepare('UPDATE vehicles SET published_at = ? WHERE id = ? AND (published_at IS NULL OR published_at > ?)').run(publishedAt, listing.vehicle_id, publishedAt);
-    return true;
-  }
-
   /** Removes one vehicle with its listings, prices and events (a wrongly read email, say). */
   deleteVehicle(id: number): void {
     this.db.prepare('DELETE FROM vehicles WHERE id = ?').run(id);
@@ -236,7 +219,10 @@ export class Store {
 
   /** The week at a glance: listings kept by the filters, contacts made, answers received. */
   weekStats(days = 7): { received: number; contacted: number; replied: number } {
-    const since = new Date(Date.now() - days * 86400_000).toISOString();
+    return this.activitySince(new Date(Date.now() - days * 86400_000).toISOString());
+  }
+
+  activitySince(since: string): { received: number; contacted: number; replied: number } {
     const received = (this.db.prepare('SELECT COUNT(*) n FROM vehicles WHERE matched = 1 AND first_seen_at >= ?').get(since) as { n: number }).n;
     const contacted = (this.db.prepare("SELECT COUNT(DISTINCT vehicle_id) n FROM events WHERE type = 'statut_contacte' AND at >= ?").get(since) as { n: number }).n;
     const replied = (this.db.prepare("SELECT COUNT(DISTINCT vehicle_id) n FROM events WHERE type = 'statut_repondu' AND at >= ?").get(since) as { n: number }).n;
@@ -272,7 +258,11 @@ export class Store {
   }
 
   recentVehicles(days: number): VehicleRow[] {
-    return this.db.prepare('SELECT * FROM vehicles WHERE first_seen_at >= ? ORDER BY first_seen_at DESC').all(new Date(Date.now() - days * 86400_000).toISOString()) as VehicleRow[];
+    return this.vehiclesFirstSeenSince(new Date(Date.now() - days * 86400_000).toISOString());
+  }
+
+  vehiclesFirstSeenSince(since: string): VehicleRow[] {
+    return this.db.prepare('SELECT * FROM vehicles WHERE first_seen_at >= ? ORDER BY first_seen_at DESC').all(since) as VehicleRow[];
   }
 
   allVehicles(): VehicleRow[] {
@@ -289,11 +279,14 @@ export class Store {
   }
 
   counts(): { nouveau: number; contacte: number; repondu: number; ignore: number; today: number } {
-    const by = this.db.prepare('SELECT status, COUNT(*) c FROM vehicles WHERE matched = 1 GROUP BY status').all() as Array<{ status: Status; c: number }>;
-    const out = { nouveau: 0, contacte: 0, repondu: 0, ignore: 0, today: 0 };
-    for (const r of by) out[r.status] = r.c;
     const start = new Date(); start.setHours(0, 0, 0, 0);
-    out.today = (this.db.prepare('SELECT COUNT(*) c FROM vehicles WHERE matched = 1 AND first_seen_at >= ?').get(start.toISOString()) as { c: number }).c;
+    return { ...this.countsByStatus(), today: (this.db.prepare('SELECT COUNT(*) c FROM vehicles WHERE matched = 1 AND first_seen_at >= ?').get(start.toISOString()) as { c: number }).c };
+  }
+
+  countsByStatus(): { nouveau: number; contacte: number; repondu: number; ignore: number } {
+    const by = this.db.prepare('SELECT status, COUNT(*) c FROM vehicles WHERE matched = 1 GROUP BY status').all() as Array<{ status: Status; c: number }>;
+    const out = { nouveau: 0, contacte: 0, repondu: 0, ignore: 0 };
+    for (const r of by) out[r.status] = r.c;
     return out;
   }
 
@@ -302,11 +295,15 @@ export class Store {
     return !!this.db.prepare('SELECT 1 FROM emails_processed WHERE message_id = ?').get(messageId);
   }
 
-  markEmail(row: { message_id: string; uid: number | null; subject: string; sender: string; received_at: string | null; site: string | null; parsed_count: number; parsed_json: string | null; error: string | null }): void {
+  markEmail(row: { message_id: string; uid: number | null; subject: string; sender: string; received_at: string | null; site: string | null; parsed_count: number; parsed_json: string | null; error: string | null }, processedAt = new Date().toISOString()): void {
     this.db.prepare(`INSERT INTO emails_processed(message_id, uid, subject, sender, received_at, site, parsed_count, parsed_json, error, processed_at)
       VALUES (@message_id, @uid, @subject, @sender, @received_at, @site, @parsed_count, @parsed_json, @error, @processed_at)
       ON CONFLICT(message_id) DO UPDATE SET parsed_count = excluded.parsed_count, parsed_json = excluded.parsed_json, error = excluded.error, processed_at = excluded.processed_at`)
-      .run({ ...row, processed_at: new Date().toISOString() });
+      .run({ ...row, processed_at: processedAt });
+  }
+
+  processedEmails(limit: number): EmailRow[] {
+    return this.db.prepare('SELECT * FROM emails_processed ORDER BY processed_at DESC, rowid LIMIT ?').all(limit) as EmailRow[];
   }
 
   recentEmails(limit = 30): Array<{ message_id: string; subject: string; sender: string; received_at: string | null; site: string | null; parsed_count: number; parsed_json: string | null; error: string | null; processed_at: string }> {
@@ -323,9 +320,9 @@ export class Store {
   }
 
   // ---------- sources status ----------
-  sourceRun(source: string, ok: boolean, detail: string): void {
+  sourceRun(source: string, ok: boolean, detail: string, at = new Date().toISOString()): void {
     this.db.prepare('INSERT INTO source_runs(source, last_run_at, ok, detail) VALUES (?, ?, ?, ?) ON CONFLICT(source) DO UPDATE SET last_run_at = excluded.last_run_at, ok = excluded.ok, detail = excluded.detail')
-      .run(source, new Date().toISOString(), ok ? 1 : 0, detail);
+      .run(source, at, ok ? 1 : 0, detail);
   }
 
   sourceRuns(): Array<{ source: string; last_run_at: string | null; ok: number; detail: string | null }> {
@@ -333,8 +330,8 @@ export class Store {
   }
 
   // ---------- push ----------
-  addPushSubscription(sub: { endpoint: string }): void {
-    this.db.prepare('INSERT INTO push_subscriptions(endpoint, json, created_at) VALUES (?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET json = excluded.json').run(sub.endpoint, JSON.stringify(sub), new Date().toISOString());
+  addPushSubscription(sub: { endpoint: string }, createdAt = new Date().toISOString()): void {
+    this.db.prepare('INSERT INTO push_subscriptions(endpoint, json, created_at) VALUES (?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET json = excluded.json').run(sub.endpoint, JSON.stringify(sub), createdAt);
   }
   removePushSubscription(endpoint: string): void {
     this.db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
@@ -371,27 +368,4 @@ export class Store {
   geoSet(key: string, value: unknown): void {
     this.db.prepare('INSERT INTO geo_cache(key, json) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET json = excluded.json').run(key, JSON.stringify(value));
   }
-}
-
-export function rawToListingRow(raw: RawListing, vehicleId: number, now: string): Omit<ListingRow, 'id'> {
-  return {
-    vehicle_id: vehicleId,
-    site: raw.site,
-    site_label: raw.siteLabel,
-    external_id: raw.externalId,
-    url: raw.url,
-    title: raw.title,
-    price: raw.price ?? null,
-    km: raw.km ?? null,
-    year: raw.year ?? null,
-    city: raw.city ?? null,
-    postal_code: raw.postalCode ?? null,
-    seller_type: raw.sellerType ?? 'inconnu',
-    image_url: raw.imageUrl ?? null,
-    description: raw.description?.trim() || null,
-    published_at: raw.publishedAt ?? null,
-    source_ref: raw.sourceRef ?? null,
-    first_seen_at: now,
-    last_seen_at: now,
-  };
 }

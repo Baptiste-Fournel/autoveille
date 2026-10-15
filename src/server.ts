@@ -8,8 +8,10 @@ import webpush from 'web-push';
 import { config } from './config.js';
 import { Store } from './db.js';
 import { Pipeline } from './pipeline.js';
-import { AppNotifier } from './notify/notify.js';
-import { Scheduler, friendlyImapError } from './scheduler.js';
+import { legacyNotificationChannel } from './notify/notify.js';
+import { Scheduler } from './scheduler.js';
+import { legacyPorts, type Notifications } from './legacyPorts.js';
+import { loggerWriting } from './systemPorts.js';
 import { AttemptLimiter, ensureSecret, hashPassword, verifyPassword } from './auth.js';
 import { registerApi } from './api.js';
 import { seedDemo } from './demo.js';
@@ -34,14 +36,15 @@ export async function buildServer(opts: { dataDir?: string; store?: Store } = {}
     if (!req.url.startsWith('/api/') && !reply.getHeader('cache-control')) reply.header('cache-control', /\.(png|svg|woff2?)$/.test(req.url) ? 'public, max-age=86400' : 'no-cache');
   });
 
-  const notifier = new AppNotifier(store, {
-    baseUrl: () => config.baseUrl || store.secret('base_url') || `http://localhost:${config.port}`,
-    vapidPublicKey: store.secret('vapid_public')!,
-    vapidPrivateKey: store.secret('vapid_private')!,
-    contactEmail: config.contactEmail,
-  });
-  const pipeline = new Pipeline(store, notifier);
-  const scheduler = new Scheduler(store, pipeline, (m) => app.log.info(m));
+  const vapidPublicKey = store.secret('vapid_public');
+  const vapidPrivateKey = store.secret('vapid_private');
+  const notifications: Notifications = {
+    channel: legacyNotificationChannel(vapidPublicKey && vapidPrivateKey ? { publicKey: vapidPublicKey, privateKey: vapidPrivateKey } : undefined, config.contactEmail),
+    address: { configuredBaseUrl: config.baseUrl, port: config.port },
+  };
+  const ports = legacyPorts(store, notifications, loggerWriting((m) => app.log.info(m)));
+  const pipeline = new Pipeline(store, notifications);
+  const scheduler = new Scheduler(ports);
   const limiter = new AttemptLimiter();
 
   const COOKIE = 'av_session';
@@ -108,7 +111,7 @@ export async function buildServer(opts: { dataDir?: string; store?: Store } = {}
     return { ok: true };
   });
 
-  registerApi(app, { store, pipeline, notifier, scheduler, friendlyImapError });
+  registerApi(app, { store, pipeline, scheduler, ports });
 
   app.setNotFoundHandler((req, reply) => {
     if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'inconnu' });

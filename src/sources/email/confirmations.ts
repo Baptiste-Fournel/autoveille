@@ -20,7 +20,7 @@ interface Input {
   date?: Date;
 }
 
-function visibleText(input: Input): { text: string; links: EmailLink[] } {
+export function visibleText(input: Pick<Input, 'html' | 'text'>): { text: string; links: EmailLink[] } {
   if (input.html) {
     const $ = cheerio.load(input.html);
     $('script, style, head').remove();

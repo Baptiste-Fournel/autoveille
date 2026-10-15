@@ -27,6 +27,10 @@ export function isDigestOfOlderAds(subject?: string): boolean {
   return KINDS_ABOUT_OLDER_ADS.includes(classifyEmail(subject));
 }
 
+export function publicationDateFromEmail(subject: string, emailDate: string | undefined): string | undefined {
+  return isDigestOfOlderAds(subject) ? undefined : emailDate;
+}
+
 export function announcedCount(subject?: string): number | undefined {
   const match = subject ? ANNOUNCED_COUNT.exec(subject) : null;
   return match ? Number(match[1]) : undefined;

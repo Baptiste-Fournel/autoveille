@@ -1,4 +1,4 @@
-import type { VehicleChanges } from './changes.js';
+import type { VehicleUpdateChanges } from './changes.js';
 import { EVENT_TYPES, type NewVehicleEvent, type VehicleEventType } from './events.js';
 import type { Status, Vehicle } from './types.js';
 
@@ -22,7 +22,7 @@ export interface VehicleUpdateRequest {
 }
 
 export interface VehicleUpdate {
-  readonly changes: VehicleChanges;
+  readonly changes: VehicleUpdateChanges;
   readonly eventsToErase: readonly VehicleEventType[];
   readonly eventsToAdd: readonly NewVehicleEvent[];
 }
@@ -37,7 +37,7 @@ export class UnknownStatus extends Error {
   }
 }
 
-const isStatus = (value: string): value is Status => STATUSES.some((status) => status === value);
+export const isStatus = (value: string): value is Status => STATUSES.some((status) => status === value);
 
 export const isAwaitingDecision = (vehicle: Pick<Vehicle, 'status' | 'doNotContact'>): boolean =>
   vehicle.status === 'nouveau' && !vehicle.doNotContact;

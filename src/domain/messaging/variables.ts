@@ -1,6 +1,7 @@
 import { formatInteger } from '../presentation/numbers.js';
 import { formatPrice } from '../presentation/prices.js';
 import type { Dealer } from '../settings/types.js';
+import { vehicleName } from '../vehicle/vehicleName.js';
 
 export type MessageVars = {
   readonly marque: string;
@@ -39,7 +40,7 @@ const isAbsent = (value: number | null | undefined): value is null | undefined =
 export function buildVars(listing: ListingForMessage, vehicle: VehicleForMessage, dealer: Dealer, distanceKm: number | null): MessageVars {
   return {
     marque: vehicle.make ?? '',
-    modele: [vehicle.make, vehicle.model].filter(Boolean).join(' ') || listing.title,
+    modele: vehicleName(vehicle, listing.title),
     annee: vehicle.year ? String(vehicle.year) : '',
     km: isAbsent(vehicle.km) ? '' : formatInteger(vehicle.km),
     prix: isAbsent(vehicle.price) ? '' : formatPrice(vehicle.price),

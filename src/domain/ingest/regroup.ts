@@ -1,9 +1,8 @@
 import { evaluate } from '../filtering/evaluate.js';
 import { sameRejections, type Verdict } from '../filtering/verdict.js';
 import { type ExtractionContext, extractVehicleInfo } from '../parsing/vehicleInfo.js';
-import { customBrandsOf } from '../settings/customBrands.js';
 import type { Settings } from '../settings/types.js';
-import { type NewVehicle, newVehicle, type VehicleChanges } from '../vehicle/changes.js';
+import { type NewVehicle, newVehicle, type RegroupingChanges } from '../vehicle/changes.js';
 import { EVENT_TYPES, type NewVehicleEvent } from '../vehicle/events.js';
 import { fingerprint, type KmAndPrice, similar } from '../vehicle/identity.js';
 import { isAwaitingDecision } from '../vehicle/status.js';
@@ -23,7 +22,7 @@ export interface SeparatedListings {
 }
 
 export interface Regrouping {
-  readonly vehicleChanges: VehicleChanges;
+  readonly vehicleChanges: RegroupingChanges;
   readonly renamed: boolean;
   readonly reevaluated: boolean;
   readonly separated: readonly SeparatedListings[];
@@ -96,9 +95,8 @@ export function regroupListings(
   vehicle: Vehicle,
   listingsInOrderRead: readonly Listing[],
   settings: Settings,
-  currentYear: number,
+  context: ExtractionContext,
 ): Regrouping | undefined {
-  const context: ExtractionContext = { customBrands: customBrandsOf(settings), currentYear };
   const [anchor, ...others] = listingsInOrderRead.map((listing) => readingOf(listing, vehicle, context));
   if (anchor === undefined) {
     return undefined;

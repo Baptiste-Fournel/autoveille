@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { announcedCount, classifyEmail, isDigestOfOlderAds } from '../../../src/domain/sites/emailKind.js';
+import { announcedCount, classifyEmail, isDigestOfOlderAds, publicationDateFromEmail } from '../../../src/domain/sites/emailKind.js';
 
 describe('sujet d’un email d’alerte', () => {
   it('nouvelles annonces, baisses de prix, relances et récapitulatifs se reconnaissent au sujet de l’email, quel que soit le site', () => {
@@ -48,5 +48,25 @@ describe('sujet d’un email d’alerte', () => {
     // Assert
     expect([priceDrops, reminder, recap]).toEqual([true, true, true]);
     expect(freshAds).toBe(false);
+  });
+
+  it('une annonce d’un email La Centrale de nouveaux véhicules est datée de l’email ; celle d’un email de baisses de prix ou d’une relance ne l’est pas', () => {
+    // Given
+    const receivedAt = '2026-10-14T06:12:44.000Z';
+    const freshAdsSubject = '61 nouveaux véhicules correspondent à votre recherche';
+    const priceDropsSubject = '↘️ 108 baisses de prix sur votre alerte';
+    const reminderSubject = 'Toujours intéressé par "Audi TT - 39900 €" ?';
+
+    // When
+    const freshAds = publicationDateFromEmail(freshAdsSubject, receivedAt);
+    const priceDrops = publicationDateFromEmail(priceDropsSubject, receivedAt);
+    const reminder = publicationDateFromEmail(reminderSubject, receivedAt);
+    const undated = publicationDateFromEmail(freshAdsSubject, undefined);
+
+    // Then
+    expect(freshAds).toBe(receivedAt);
+    expect(priceDrops).toBeUndefined();
+    expect(reminder).toBeUndefined();
+    expect(undated).toBeUndefined();
   });
 });

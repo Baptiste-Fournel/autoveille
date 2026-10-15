@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type Regrouping, regroupListings, vehicleOfSeparatedListings } from '../../../src/domain/ingest/regroup.js';
+import { extractionContextAt } from '../../../src/domain/parsing/extractionContext.js';
 import { extractVehicleInfo } from '../../../src/domain/parsing/vehicleInfo.js';
-import { customBrandsOf } from '../../../src/domain/settings/customBrands.js';
 import { defaultSettings } from '../../../src/domain/settings/defaults.js';
 import type { Settings } from '../../../src/domain/settings/types.js';
 import { fingerprint } from '../../../src/domain/vehicle/identity.js';
@@ -10,16 +10,16 @@ import { FIRST_READ_AT, knownListing, knownVehicle, PESSAC } from '../../support
 import { rawListing } from '../../support/rawListing.js';
 
 const settings = defaultSettings();
-const CURRENT_YEAR = 2026;
+const REPAIRED_AT = '2026-10-15T08:30:00.000Z';
 const MERGED_AT = '2026-10-09T17:45:00.000Z';
 
 const fingerprintOf = (listing: Listing, rules: Settings = settings): string => {
   const raw = rawListing(listing.title, { year: listing.year ?? undefined, postalCode: listing.postalCode ?? undefined });
-  return fingerprint(extractVehicleInfo(raw, { customBrands: customBrandsOf(rules), currentYear: CURRENT_YEAR }), raw);
+  return fingerprint(extractVehicleInfo(raw, extractionContextAt(rules, REPAIRED_AT)), raw);
 };
 
 const repaired = (vehicle: Vehicle, listings: readonly Listing[], rules: Settings = settings): Regrouping => {
-  const regrouping = regroupListings(vehicle, listings, rules, CURRENT_YEAR);
+  const regrouping = regroupListings(vehicle, listings, rules, extractionContextAt(rules, REPAIRED_AT));
   if (regrouping === undefined) {
     throw new Error('aucune annonce à relire');
   }
@@ -525,7 +525,7 @@ describe('réparation : un véhicule relu avec les règles du jour', () => {
     const orphan = knownVehicle({ firstSeenAt: FIRST_READ_AT });
 
     // When
-    const regrouping = regroupListings(orphan, [], settings, CURRENT_YEAR);
+    const regrouping = regroupListings(orphan, [], settings, extractionContextAt(settings, REPAIRED_AT));
 
     // Then
     expect(regrouping).toBeUndefined();

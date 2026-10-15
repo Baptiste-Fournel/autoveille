@@ -1,80 +1,55 @@
-import type { Store } from './db.js';
-import type { Pipeline } from './pipeline.js';
-import { pollMailbox } from './sources/email/imap.js';
-import { fetchSite } from './sources/http.js';
+import { type FetchHttpSitesDependencies, type HttpSitesFetching, httpSitesFetching } from './application/sources/fetchHttpSites.js';
+import { type MailboxPolling, mailboxPolling, type PollMailboxDependencies } from './application/sources/pollMailbox.js';
+import type { SourceRunSummary } from './application/sources/sourceRunSummary.js';
 
-export interface RunSummary { source: string; ok: boolean; detail: string }
+const FIRST_RUN_DELAY_MS = 5_000;
 
-/** Runs the mail poll and the HTTP sites on their own cadence, never two runs of the same source at once. */
+const MINUTE_MS = 60_000;
+
+const MIN_MAIL_MINUTES = 1;
+
+const MIN_HTTP_MINUTES = 5;
+
 export class Scheduler {
-  private mailRun: Promise<RunSummary> | null = null;
-  private httpBusy = false;
-  private timers: NodeJS.Timeout[] = [];
+  private readonly mail: MailboxPolling;
 
-  constructor(private readonly store: Store, private readonly pipeline: Pipeline, private readonly log: (m: string) => void) {}
+  private readonly http: HttpSitesFetching;
+
+  private timers: readonly NodeJS.Timeout[] = [];
+
+  constructor(dependencies: PollMailboxDependencies & FetchHttpSitesDependencies) {
+    this.mail = mailboxPolling(dependencies);
+    this.http = httpSitesFetching(dependencies);
+  }
 
   start(mailMinutes: number, httpMinutes: number): void {
-    this.timers.push(setInterval(() => void this.runMail(), Math.max(1, mailMinutes) * 60_000));
-    this.timers.push(setInterval(() => void this.runHttp(), Math.max(5, httpMinutes) * 60_000));
-    setTimeout(() => { void this.runMail(); void this.runHttp(); }, 5_000);
+    this.timers = [
+      ...this.timers,
+      setInterval(() => void this.runMail(), Math.max(MIN_MAIL_MINUTES, mailMinutes) * MINUTE_MS),
+      setInterval(() => void this.runHttp(), Math.max(MIN_HTTP_MINUTES, httpMinutes) * MINUTE_MS),
+    ];
+    setTimeout(() => {
+      void this.runMail();
+      void this.runHttp();
+    }, FIRST_RUN_DELAY_MS);
   }
 
-  stop(): void { this.timers.forEach(clearInterval); this.timers = []; }
-
-  /** Resolves once no mail run is in progress. */
-  async idleMail(): Promise<void> { if (this.mailRun) await this.mailRun.catch(() => undefined); }
-
-  /** One run at a time: a second call while a run is in progress waits for that run and returns its result. */
-  async runMail(): Promise<RunSummary> {
-    if (this.mailRun) return this.mailRun;
-    this.mailRun = this.doRunMail().finally(() => { this.mailRun = null; });
-    return this.mailRun;
-  }
-
-  private async doRunMail(): Promise<RunSummary> {
-    const imap = this.store.getSettings().imap;
-    if (!imap.user || !imap.pass || !imap.host) return { source: 'email', ok: false, detail: 'Boîte mail non configurée.' };
-    try {
-      const r = await pollMailbox(imap, this.store, this.pipeline, this.log);
-      const detail = `${r.processed} email(s) lu(s), ${r.listings} annonce(s), ${r.matched} nouvelle(s) correspondant aux réglages${r.errors.length ? ` ; ${r.errors.length} erreur(s) : ${r.errors[0]}` : ''}`;
-      this.store.sourceRun('email', r.errors.length === 0, detail);
-      this.log(`email: ${detail}`);
-      return { source: 'email', ok: true, detail };
-    } catch (err) {
-      const detail = friendlyImapError(err);
-      this.store.sourceRun('email', false, detail);
-      this.log(`email: ${detail}`);
-      return { source: 'email', ok: false, detail };
+  stop(): void {
+    for (const timer of this.timers) {
+      clearInterval(timer);
     }
+    this.timers = [];
   }
 
-  async runHttp(): Promise<RunSummary[]> {
-    const sites = this.store.getSettings().httpSites.filter((s) => s.enabled && s.url);
-    if (!sites.length || this.httpBusy) return [];
-    this.httpBusy = true;
-    const out: RunSummary[] = [];
-    try {
-      for (const site of sites) {
-        const r = await fetchSite(site.url);
-        let matched = 0;
-        for (const l of r.listings) {
-          const o = await this.pipeline.ingest(l);
-          if (o.kind === 'new' && o.matched) matched++;
-        }
-        const detail = r.ok ? `${r.detail} ${matched} nouvelle(s) correspondant aux réglages.` : r.detail;
-        this.store.sourceRun(`http:${site.id}`, r.ok, detail);
-        out.push({ source: site.name, ok: r.ok, detail });
-      }
-    } finally {
-      this.httpBusy = false;
-    }
-    return out;
+  runMail(): Promise<SourceRunSummary> {
+    return this.mail.poll();
   }
-}
 
-export function friendlyImapError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (/auth|credentials|invalid|login|password/i.test(msg)) return 'Connexion à la boîte mail refusée : vérifiez l’adresse et le mot de passe d’application (Gmail exige un mot de passe d’application, pas le mot de passe habituel).';
-  if (/ENOTFOUND|EAI_AGAIN|ECONN|timeout/i.test(msg)) return `Serveur mail injoignable (${msg}).`;
-  return `Erreur de lecture de la boîte mail : ${msg}`;
+  rereadAll(): Promise<SourceRunSummary> {
+    return this.mail.rereadAll();
+  }
+
+  runHttp(): Promise<readonly SourceRunSummary[]> {
+    return this.http.fetchAll();
+  }
 }
