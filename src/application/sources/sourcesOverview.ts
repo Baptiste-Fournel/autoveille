@@ -3,6 +3,7 @@ import type { AlertInfo, HttpSite, Settings } from '../../domain/settings/types.
 import { type SiteSetup, siteSetups, type TargetedSearch, targetedSearches } from '../../domain/sites/alertSetup.js';
 import { type AlertMismatch, type AlertWidening, alertAdvice, alertMismatch } from '../../domain/sites/confirmations.js';
 import { truncatedNewAdsDigest } from '../../domain/sites/truncatedDigest.js';
+import { isWebAddress } from '../../domain/sites/webAddress.js';
 import type { MailboxStateRepository, ProcessedEmail } from '../ports/mailboxStateRepository.js';
 import type { SettingsRepository } from '../ports/settingsRepository.js';
 import type { SourceRun, SourceRunRepository } from '../ports/sourceRunRepository.js';
@@ -54,6 +55,14 @@ export interface SourcesOverviewDependencies {
 const EMAILS_SEARCHED_FOR_DIGESTS = 60;
 const EMAILS_SHOWN = 25;
 
+const webAddressOrUndefined = (address: string | undefined): string | undefined =>
+  address !== undefined && isWebAddress(address) ? address : undefined;
+
+const offeredEmail = (recorded: ProcessedEmail): ProcessedEmail =>
+  recorded.summary === null
+    ? recorded
+    : { ...recorded, summary: { ...recorded.summary, moreUrl: webAddressOrUndefined(recorded.summary.moreUrl) } };
+
 const truncatedDigestOf = (email: ProcessedEmail): readonly (readonly [string, TruncatedDigest])[] => {
   const { summary } = email;
   if (summary === null) {
@@ -88,8 +97,11 @@ const latestTruncatedDigestBySite = (mostRecentFirst: readonly ProcessedEmail[])
 const lastRunOf = (runs: readonly SourceRun[], source: SourceRun['source']): SourceRun | null =>
   runs.find((run) => run.source === source) ?? null;
 
+const offeredAlert = (recorded: AlertInfo): AlertInfo => ({ ...recorded, manageUrl: webAddressOrUndefined(recorded.manageUrl) });
+
 const siteOverview = (setup: SiteSetup, settings: Settings, digests: ReadonlyMap<string, TruncatedDigest>): SiteOverview => {
-  const alert = settings.alerts[setup.key];
+  const recorded = settings.alerts[setup.key];
+  const alert = recorded && offeredAlert(recorded);
   return {
     ...setup,
     done: Boolean(settings.alertsDone[setup.key]),
@@ -104,7 +116,7 @@ const siteOverview = (setup: SiteSetup, settings: Settings, digests: ReadonlyMap
 export const sourcesOverview = ({ settings, sourceRuns, mailboxState }: SourcesOverviewDependencies): SourcesOverview => {
   const current = settings.load();
   const runs = sourceRuns.all();
-  const emails = mailboxState.recentlyProcessed(EMAILS_SEARCHED_FOR_DIGESTS);
+  const emails = mailboxState.recentlyProcessed(EMAILS_SEARCHED_FOR_DIGESTS).map(offeredEmail);
   const digests = latestTruncatedDigestBySite(emails);
   const { imap } = current;
   return {

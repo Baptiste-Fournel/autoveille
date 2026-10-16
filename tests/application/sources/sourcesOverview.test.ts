@@ -89,6 +89,41 @@ describe('l’écran Sites', () => {
     ]);
   });
 
+  it('ne propose aucun lien javascript: qu’un email lu avant le correctif a laissé en base : ni la suite d’un résumé La Centrale, sur l’écran Sites comme dans les emails reçus, ni « Modifier votre alerte » d’une confirmation ParuVendu', () => {
+    // Given
+    const mailboxState = fakeMailboxStateRepository();
+    mailboxState.recordProcessed({
+      ...laCentraleDigest('<digest-61@mail-alerte.lacentrale.fr>', 61, '2026-10-15T06:36:59.000Z'),
+      summary: {
+        listings: [],
+        pending: 0,
+        ignored: 0,
+        announced: 61,
+        kind: 'new',
+        moreUrl: 'javascript://www.lacentrale.fr/%0aalert(document.domain)',
+      },
+    });
+    const hijackedConfirmation: AlertInfo = {
+      site: 'paruvendu',
+      criteria: 'Voiture d’occasion, Bordeaux (33000), Rayon de 100 km',
+      confirmedAt: '2026-10-14T09:00:00.000Z',
+      manageUrl: 'javascript:alert(document.domain)',
+    };
+    const settings = fakeSettingsRepository(recordAlertConfirmation(defaultSettings(), hijackedConfirmation));
+
+    // When
+    const overview = sourcesOverview({ settings, sourceRuns: fakeSourceRunRepository(), mailboxState });
+
+    // Then
+    const laCentrale = overview.sites.find((site) => site.key === 'lacentrale');
+    const paruVendu = overview.sites.find((site) => site.key === 'paruvendu');
+    expect(laCentrale?.digest).toMatchObject({ announced: 61, received: 3, url: null });
+    expect(paruVendu?.alert).toMatchObject({ site: 'paruvendu', criteria: 'Voiture d’occasion, Bordeaux (33000), Rayon de 100 km' });
+    expect(paruVendu?.alert?.manageUrl).toBeUndefined();
+    expect(overview.emails.map((email) => email.summary?.moreUrl)).toEqual([undefined]);
+    expect(JSON.stringify(overview)).not.toContain('javascript:');
+  });
+
   it('un récapitulatif La Centrale de la semaine qui annonce plus d’annonces qu’il n’en montre n’est pas un résumé tronqué de nouvelles annonces', () => {
     // Given
     const mailboxState = fakeMailboxStateRepository();

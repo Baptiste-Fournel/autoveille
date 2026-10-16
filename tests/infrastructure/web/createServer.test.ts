@@ -6,7 +6,9 @@ import type { LightMyRequestResponse } from 'fastify';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { SettingsResponse } from '../../../src/shared/api.js';
 import { OWNER_PASSWORD, PHONE_ADDRESS, SESSION_COOKIE, THIS_MACHINE } from '../../support/authentication.js';
+import { DEALER_MAILBOX } from '../../support/dealerMailbox.js';
 import { runningApplication, signedInApplication } from '../../support/signedInApplication.js';
+import { simulatedImapClient } from '../../support/simulatedImapClient.js';
 
 const DAY_MS = 86_400_000;
 
@@ -276,6 +278,24 @@ describe('adresses de l’API écrites autrement', () => {
     // Then
     expect({ status: response.statusCode, body: response.json() }).toEqual({ status: 401, body: { error: 'non connecté' } });
     expect(application.ports.settings.load().imap.host).toBe(settings.imap.host);
+  });
+
+  it('un test de la boîte envoyé sans session à /%61pi/sources/imap/test vers un serveur tiers, avec le mot de passe masqué, est refusé sans qu’aucune connexion parte vers ce serveur', async () => {
+    // Given
+    const imap = simulatedImapClient();
+    const { application, session } = await signedInApplication({ imapClient: imap.createClient });
+    await application.server.inject({ method: 'PUT', url: '/api/settings', headers: session, payload: { imap: DEALER_MAILBOX } });
+
+    // When
+    const response = await application.server.inject({
+      method: 'POST',
+      url: '/%61pi/sources/imap/test',
+      payload: { ...DEALER_MAILBOX, host: 'imap.attaquant.example', pass: '••••••••' },
+    });
+
+    // Then
+    expect({ status: response.statusCode, body: response.json() }).toEqual({ status: 401, body: { error: 'non connecté' } });
+    expect(imap.connections().map((connection) => connection.host)).not.toContain('imap.attaquant.example');
   });
 
   it('le jeton d’import demandé sans session à /%61pi/import/token est refusé', async () => {

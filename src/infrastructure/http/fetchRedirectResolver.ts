@@ -1,5 +1,6 @@
 import type { RedirectResolver } from '../../application/ports/redirectResolver.js';
 import { siteForHost } from '../../domain/sites/catalog.js';
+import { isWebAddress } from '../../domain/sites/webAddress.js';
 import { type DeadlineTimers, withDeadline } from './deadline.js';
 import type { Web } from './web.js';
 
@@ -37,6 +38,9 @@ const follow = async <Handle>(web: Web<Handle>, href: string, address: string, h
   const next = await nextAddress(web, address);
   if (next === undefined) {
     return address !== href ? address : undefined;
+  }
+  if (!isWebAddress(next)) {
+    return undefined;
   }
   return siteForHost(new URL(next).hostname) ? next : follow(web, href, next, hopsLeft - 1);
 };

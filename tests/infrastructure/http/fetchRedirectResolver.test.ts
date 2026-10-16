@@ -95,6 +95,19 @@ describe('suivi d’un lien de suivi jusqu’à l’annonce', () => {
     expect(web.requested()).toEqual([hop(1), hop(2), hop(3), hop(4), hop(5), hop(6)]);
   });
 
+  it('un lien de suivi Leboncoin qui répond 302 vers une adresse javascript: portant l’hôte du site : cette adresse n’est pas prise comme destination', async () => {
+    // Given
+    const tracker = 'https://click.leboncoin.fr/r/abc123';
+    const web = simulatedWeb({ [tracker]: redirectingTo('javascript://www.leboncoin.fr/%0aalert(document.domain)') });
+
+    // When
+    const destination = await fetchRedirectResolver(web.fetch, manualTimers()).resolve(tracker);
+
+    // Then
+    expect(destination).toBeUndefined();
+    expect(web.requested()).toEqual([tracker]);
+  });
+
   it('un lien de suivi qui mène, par un 302, au site d’un garage hors catalogue : la page du garage est la destination', async () => {
     // Given
     const garagePage = 'https://www.garage-des-graves.fr/vehicule/porsche-911-carrera-4s-123456';

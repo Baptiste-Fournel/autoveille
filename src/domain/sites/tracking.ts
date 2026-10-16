@@ -1,4 +1,5 @@
 import { siteForHost } from './catalog.js';
+import { isWebAddress } from './webAddress.js';
 
 export interface UnwrappedUrl {
   readonly url: string;
@@ -20,22 +21,17 @@ function decodedOrAsIs(text: string): string {
   }
 }
 
-const knownSiteUrl = (text: string): URL | undefined => {
-  const candidate = urlOf(text);
-  return candidate && siteForHost(candidate.hostname) ? candidate : undefined;
-};
+const knownSitePage = (candidate: URL | undefined): URL | undefined =>
+  candidate && isWebAddress(candidate.href) && siteForHost(candidate.hostname) ? candidate : undefined;
 
 const destinationInQuery = (url: URL): URL | undefined =>
   [...url.searchParams.values()]
-    .map((value) => {
-      const candidate = urlOf(value) ?? urlOf(decodedOrAsIs(value));
-      return candidate && siteForHost(candidate.hostname) ? candidate : undefined;
-    })
+    .map((value) => knownSitePage(urlOf(value) ?? urlOf(decodedOrAsIs(value))))
     .find((candidate) => candidate !== undefined);
 
 const destinationInPath = (url: URL): URL | undefined => {
   const inline = /https?:\/\/[^\s"'<>]+/i.exec(decodedOrAsIs(url.pathname + url.search));
-  return inline ? knownSiteUrl(inline[0]) : undefined;
+  return inline ? knownSitePage(urlOf(inline[0])) : undefined;
 };
 
 export function unwrapTrackingUrl(href: string): UnwrappedUrl {

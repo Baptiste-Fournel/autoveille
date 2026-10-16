@@ -33,6 +33,17 @@ describe('lien de suivi des emails d’alerte', () => {
     expect(encoded).toEqual({ url: 'https://www.leboncoin.fr/ad/voitures/2811001234', resolved: true });
   });
 
+  it('un lien de suivi Leboncoin dont le paramètre de destination est une adresse javascript: est laissé à la résolution HTTP, même avec l’hôte du site', () => {
+    // Arrange
+    const tracker = `https://click.leboncoin.fr/r?u=${encodeURIComponent('javascript://www.leboncoin.fr/ad/voitures/2811001234%0aalert(document.domain)')}`;
+
+    // Act
+    const unwrapped = unwrapTrackingUrl(tracker);
+
+    // Assert
+    expect(unwrapped).toEqual({ url: tracker, resolved: false });
+  });
+
   it('un lien de suivi La Centrale sans destination lisible (« clicks.mail-alerte.lacentrale.fr/f/a/… ») attend une résolution HTTP', () => {
     // Arrange
     const link = 'https://clicks.mail-alerte.lacentrale.fr/f/a/t4~~/AAAHahA~/x';
