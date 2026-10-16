@@ -1,4 +1,5 @@
 import { UNNAMED_HTTP_SITE } from '../presentation/settings.js';
+import { isWebAddress } from '../sites/webAddress.js';
 import { DEFAULT_IMAP_PORT } from './defaults.js';
 import { InvalidSettings } from './invalidSettings.js';
 import { perFamily } from './perFamily.js';
@@ -54,7 +55,7 @@ const isAlertConfirmation = (alert: AlertInfo): boolean =>
   Boolean(alert) && typeof alert === 'object' && typeof alert.criteria === 'string';
 
 const webPageOrUndefined = (url: string | undefined): string | undefined =>
-  url && /^https?:/i.test(url) ? url.slice(0, ALERT_MANAGE_URL_MAX_LENGTH) : undefined;
+  url && isWebAddress(url) ? url.slice(0, ALERT_MANAGE_URL_MAX_LENGTH) : undefined;
 
 const siteKey = (site: string): string => String(site).slice(0, SITE_KEY_MAX_LENGTH);
 

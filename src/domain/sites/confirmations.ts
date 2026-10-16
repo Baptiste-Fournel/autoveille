@@ -9,6 +9,7 @@ import {
 import type { AlertInfo, Settings } from '../settings/types.js';
 import { alertBounds } from './alertSetup.js';
 import { siteForSender } from './catalog.js';
+import { isWebAddress } from './webAddress.js';
 
 export interface EmailLink {
   readonly text: string;
@@ -99,7 +100,7 @@ function paruVenduConfirmation({ subject, text, links }: ReadableEmail, base: Co
   const radiusKm = positiveNumber(/Rayon de\s*(\d+)\s*km/iu.exec(sentence)?.[1]);
   const maxKm = positiveNumber(/Jusqu'à\s*([\d\s]{3,9})\s*km/iu.exec(sentence)?.[1]);
   const postalCode = /\((\d{5})\)/.exec(sentence)?.[1];
-  const modifyLink = links.find((link) => /modifier votre alerte/i.test(link.text))?.href;
+  const modifyLink = links.find((link) => /modifier votre alerte/i.test(link.text) && isWebAddress(link.href))?.href;
   return {
     ...base,
     criteria: paruVenduCriteriaList(sentence) || PARUVENDU_ALERT_SAVED,

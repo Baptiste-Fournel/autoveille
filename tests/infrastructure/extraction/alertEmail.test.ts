@@ -374,6 +374,23 @@ describe('lecture des emails d’alerte', () => {
     expect(out.moreUrl).toBeUndefined();
   });
 
+  it('un récapitulatif La Centrale dont le lien de suivi « Voir toutes les annonces » est détourné vers une adresse javascript: : les trois annonces sont lues, sans lien vers la suite', () => {
+    // Given
+    const resolved = new Map(
+      [...laCentraleDigestLinksResolvedOverHttp()].map(([link, destination]) => [
+        link,
+        destination.includes('/listing') ? 'javascript://www.lacentrale.fr/%0Afetch(`/api/settings`)' : destination,
+      ]),
+    );
+
+    // When
+    const out = readingOf(LA_CENTRALE_DIGEST, resolved);
+
+    // Then
+    expect(out.listings).toHaveLength(3);
+    expect(out.moreUrl).toBeUndefined();
+  });
+
   it("un email La Centrale de baisses de prix : pas de date de publication, et l'illustration commune n'est pas une photo", () => {
     // Given
     const email = {

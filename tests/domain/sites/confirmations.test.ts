@@ -67,6 +67,22 @@ describe("email de confirmation d'alerte, sur le texte déjà extrait", () => {
     });
   });
 
+  it("un email qui imite la confirmation ParuVendu avec un lien « Modifier votre alerte » en javascript: : c'est la page de gestion du site qui est gardée", () => {
+    // Arrange
+    const confirmation = email({
+      from: 'info@paruvendu.fr',
+      subject: 'ParuVendu.fr - Confirmation de la création de votre alerte',
+      text: "Nous vous confirmons l'enregistrement de votre alerte mail. Vos critères de recherche : Voiture d'occasion Bordeaux (33000) Rayon de 100 km Jusqu'à 100 000 km » Voir les annonces » Modifier votre alerte",
+      links: [{ text: '» Modifier votre alerte', href: 'javascript://www.paruvendu.fr/%0Afetch(`/api/settings`)' }],
+    });
+
+    // Act
+    const alert = detectAlertConfirmation(confirmation);
+
+    // Assert
+    expect(alert?.manageUrl).toBe('https://www.paruvendu.fr/utilisateurparticulierfo/default/accueilCompte/');
+  });
+
   it("l'email AutoScout24 « ta recherche a bien été enregistrée » : le nom de la recherche, sans critères, et la page des recherches sauvegardées", () => {
     // Arrange
     const confirmation = email({

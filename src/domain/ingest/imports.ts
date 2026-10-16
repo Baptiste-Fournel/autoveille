@@ -1,4 +1,5 @@
 import { siteLabel } from '../sites/catalog.js';
+import { isWebAddress } from '../sites/webAddress.js';
 import { daysAfter } from '../time/daysAfter.js';
 import type { RawListing, SellerType } from '../vehicle/types.js';
 
@@ -30,8 +31,6 @@ const MAX_LENGTH = {
 
 const PUBLICATION_DATE_TOLERANCE_DAYS = 1;
 
-const WEB_ADDRESS = /^https?:/i;
-
 const textOf = (value: unknown, maxLength: number): string => String(value ?? '').slice(0, maxLength);
 
 const optionalTextOf = (value: unknown, maxLength: number): string | undefined => (value ? String(value).slice(0, maxLength) : undefined);
@@ -42,7 +41,7 @@ const positiveWholeNumber = (value: unknown): number | undefined => {
 };
 
 const webAddressOf = (value: unknown): string | undefined =>
-  value && WEB_ADDRESS.test(String(value)) ? String(value).slice(0, MAX_LENGTH.imageUrl) : undefined;
+  value && isWebAddress(String(value)) ? String(value).slice(0, MAX_LENGTH.imageUrl) : undefined;
 
 const sellerTypeOf = (value: unknown): SellerType | undefined => (value === 'pro' || value === 'particulier' ? value : undefined);
 
@@ -55,7 +54,7 @@ export function listingFromImport(item: ImportedListing): RawListing | undefined
   const title = String(item.title ?? '')
     .trim()
     .slice(0, MAX_LENGTH.title);
-  if (!site || !WEB_ADDRESS.test(url) || !title) {
+  if (!site || !isWebAddress(url) || !title) {
     return undefined;
   }
   return {
