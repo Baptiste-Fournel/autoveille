@@ -1,10 +1,10 @@
-const DAY_MS = 86_400_000;
+import { calendarDaysBetween } from './calendarDays';
 
 export const daysAgo = (iso: string | null | undefined, now: number): string => {
   if (!iso) {
     return '';
   }
-  const days = Math.floor((now - new Date(iso).getTime()) / DAY_MS);
+  const days = calendarDaysBetween(new Date(iso).getTime(), now);
   if (days <= 0) {
     return 'aujourd’hui';
   }

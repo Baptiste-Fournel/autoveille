@@ -81,6 +81,30 @@ describe('formatage des écrans', () => {
     expect(lastYear).toBe('le 3 nov. 2025');
   });
 
+  it('une Renault 12 publiée avant-hier à 22:57, vue le surlendemain à 14:03 (39 h plus tard), s’affiche « le 14 oct. », pas « hier »', () => {
+    // Given
+    const now = at(2026, 10, 16, 14, 3).getTime();
+
+    // When
+    const twoCalendarDaysAgo = ago(at(2026, 10, 14, 22, 57).toISOString(), now);
+    const lateYesterday = ago(at(2026, 10, 15, 23, 40).toISOString(), now);
+
+    // Then
+    expect(twoCalendarDaysAgo).toBe('le 14 oct.');
+    expect(lateYesterday).toBe('hier à 23:40');
+  });
+
+  it('un vendeur contacté avant-hier à 20:00, vu le surlendemain à 9:00 (37 h plus tard), attend « il y a 2 j », pas « hier »', () => {
+    // Given
+    const now = at(2026, 10, 16, 9, 0).getTime();
+
+    // When
+    const twoCalendarDaysAgo = daysAgo(at(2026, 10, 14, 20, 0).toISOString(), now);
+
+    // Then
+    expect(twoCalendarDaysAgo).toBe('il y a 2 j');
+  });
+
   it('un vendeur contacté il y a trois jours attend « il y a 3 j », contacté hier « hier »', () => {
     // Given
     const now = at(2026, 10, 16, 9, 0).getTime();
