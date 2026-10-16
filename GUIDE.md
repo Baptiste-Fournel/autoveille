@@ -31,7 +31,7 @@ Toucher la photo ou le titre d'une annonce ouvre sa **fiche** : grande photo, ca
 
 Dans « Contactées », chaque carte indique depuis combien de jours le vendeur a été contacté ; dans « Ont répondu », depuis quand. Une ligne en haut de l'écran résume les sept derniers jours : annonces retenues, contactées, réponses.
 
-La date affichée sur une annonce est celle de sa publication sur le site (« publiée hier à 10:02 ») ; les annonces sont classées de la plus récente à la plus ancienne. Un champ de recherche filtre par modèle, marque ou ville, et le bouton **Filtres** trie (plus récentes, prix, distance, kilométrage) et restreint par famille, par site, par prix et par distance, à la barre. Les choix restent mémorisés sur l'appareil.
+La date affichée sur une annonce est celle de sa publication sur le site (« publiée hier à 10:02 ») ; les annonces sont classées de la plus récente à la plus ancienne. Un champ de recherche filtre par modèle, marque ou ville, et le bouton **Filtres** trie (plus récentes, prix, distance, kilométrage) et restreint par famille, par site, par prix et par distance, à la barre. Les choix restent mémorisés sur l'appareil. La liste s'affiche par cinquante annonces : « Charger plus », en bas, montre les suivantes ; la recherche et les filtres portent sur les annonces affichées.
 
 L'icône soleil / lune en haut de l'écran bascule entre mode clair et mode sombre. Dans Réglages > Affichage, « Comme l'appareil » fait suivre le réglage du téléphone.
 

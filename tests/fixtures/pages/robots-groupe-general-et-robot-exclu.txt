@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /compte/
+Disallow: /recherche*
+Allow: /recherche/public
+
+User-agent: badbot
+Disallow: /

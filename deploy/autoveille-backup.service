@@ -1,0 +1,10 @@
+# Sauvegarde quotidienne de la base (deploy/backup.sh), déclenchée par autoveille-backup.timer.
+# Installée par install.sh, ou par update.sh sur un serveur installé avant elle.
+[Unit]
+Description=AutoVeille : sauvegarde quotidienne de la base
+
+[Service]
+Type=oneshot
+User=autoveille
+WorkingDirectory=/opt/autoveille
+ExecStart=/bin/bash /opt/autoveille/deploy/backup.sh
