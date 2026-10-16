@@ -1,0 +1,67 @@
+import type { Family } from '../catalog/families.js';
+import type { RawListing } from '../vehicle/types.js';
+
+export const SAMPLE_DISTANCE_KM = 12;
+
+export const SAMPLE_LISTINGS: Readonly<Record<Family, RawListing>> = {
+  allemandes: {
+    site: 'leboncoin',
+    siteLabel: 'Leboncoin',
+    externalId: 'ex',
+    url: '#',
+    title: 'Porsche 911 Carrera S 3.0 420ch PDK',
+    price: 89900,
+    km: 42000,
+    year: 2015,
+    city: 'Pessac',
+    postalCode: '33600',
+  },
+  italiennes: {
+    site: 'lacentrale',
+    siteLabel: 'La Centrale',
+    externalId: 'ex',
+    url: '#',
+    title: 'Ferrari 360 Modena F1',
+    price: 79000,
+    km: 45000,
+    year: 2001,
+    city: 'Libourne',
+    postalCode: '33500',
+  },
+  americaines: {
+    site: 'leboncoin',
+    siteLabel: 'Leboncoin',
+    externalId: 'ex',
+    url: '#',
+    title: 'Ford Mustang GT 5.0 V8',
+    price: 42000,
+    km: 31000,
+    year: 2018,
+    city: 'Arcachon',
+    postalCode: '33120',
+  },
+  francaises: {
+    site: 'paruvendu',
+    siteLabel: 'ParuVendu',
+    externalId: 'ex',
+    url: '#',
+    title: 'Alpine A110 Légende 252ch',
+    price: 58900,
+    km: 21000,
+    year: 2019,
+    city: 'Langon',
+    postalCode: '33210',
+  },
+  autres: {
+    site: 'leboncoin',
+    siteLabel: 'Leboncoin',
+    externalId: 'ex',
+    url: '#',
+    title: 'Porsche 911',
+    price: 0,
+    km: 0,
+    year: 2015,
+    city: 'Bordeaux',
+    postalCode: '33000',
+  },
+};

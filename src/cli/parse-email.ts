@@ -1,18 +1,52 @@
-/** Test de l'extraction sur un email enregistré (.eml) :  npm run parse-email -- chemin/vers/alerte.eml */
-import fs from 'node:fs';
-import { simpleParser } from 'mailparser';
-import { parseAlertEmail } from '../sources/email/parse.js';
-import { resolveRedirect } from '../sources/sites.js';
-import { extractVehicleInfo } from '../listings/normalize.js';
+import { readFileSync } from 'node:fs';
+import type { EmailContent, EmailListing, EmailMessage } from '../application/ports/listingExtractor.js';
+import { readAlertEmail } from '../application/sources/readAlertEmail.js';
+import { extractVehicleInfo } from '../domain/parsing/vehicleInfo.js';
+import { PARSE_EMAIL_USAGE_TEXT } from '../domain/presentation/commands.js';
+import { publicationDateFromEmail } from '../domain/sites/emailKind.js';
+import { yearOf } from '../domain/time/yearOf.js';
+import { systemClock } from '../infrastructure/system/systemClock.js';
+import { systemAlertEmailReading } from '../main.js';
+
+const OFFLINE_OPTION = '--offline';
+
+const EVERY_LINK = Number.POSITIVE_INFINITY;
+
+const NO_LINK = 0;
+
+const contentOf = (email: EmailMessage): EmailContent => ({
+  messageId: email.messageId ?? '',
+  from: email.from,
+  subject: email.subject,
+  html: email.html,
+  text: email.text,
+});
+
+const shownListing = (email: EmailMessage, listing: EmailListing) => ({
+  ...listing,
+  publishedAt: publicationDateFromEmail(email.subject, email.date),
+  sourceRef: email.messageId,
+  description: undefined,
+  vehicle: extractVehicleInfo(listing, { customBrands: [], currentYear: yearOf(systemClock.now()) }),
+});
 
 const file = process.argv[2];
-if (!file) { console.error('Usage : npm run parse-email -- fichier.eml'); process.exit(1); }
-const parsed = await simpleParser(fs.readFileSync(file));
-const input = { html: typeof parsed.html === 'string' ? parsed.html : undefined, text: parsed.text, subject: parsed.subject, from: parsed.from?.value?.[0]?.address, date: parsed.date, messageId: parsed.messageId };
-let out = parseAlertEmail(input);
-if (out.pending.length && !process.argv.includes('--offline')) {
-  const resolved = new Map<string, string>();
-  for (const p of out.pending) { const d = await resolveRedirect(p.href); if (d) resolved.set(p.href, d); }
-  out = parseAlertEmail(input, resolved);
+if (!file) {
+  console.error(PARSE_EMAIL_USAGE_TEXT);
+  process.exit(1);
 }
-console.log(JSON.stringify({ site: out.site, pending: out.pending.length, ignored: out.ignored, listings: out.listings.map((l) => ({ ...l, description: undefined, vehicle: extractVehicleInfo(l) })) }, null, 2));
+const reading = systemAlertEmailReading();
+const email = await reading.extractor.readEmail(readFileSync(file));
+const emailReading = await readAlertEmail(reading, contentOf(email), process.argv.includes(OFFLINE_OPTION) ? NO_LINK : EVERY_LINK);
+console.log(
+  JSON.stringify(
+    {
+      site: emailReading.site,
+      pending: emailReading.pendingLinks.length,
+      ignored: emailReading.ignoredLinks,
+      listings: emailReading.listings.map((listing) => shownListing(email, listing)),
+    },
+    null,
+    2,
+  ),
+);

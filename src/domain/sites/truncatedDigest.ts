@@ -2,7 +2,7 @@ import type { EmailKind } from './emailKind.js';
 
 interface DigestCount {
   readonly site: string | null | undefined;
-  readonly kind: EmailKind;
+  readonly kind: EmailKind | undefined;
   readonly announced: number | undefined;
   readonly received: number;
 }

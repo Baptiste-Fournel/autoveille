@@ -97,7 +97,7 @@ Wants=network-online.target
 [Service]
 User=$APP_USER
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/node dist/server.js
+ExecStart=/usr/bin/node dist/server/main.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production

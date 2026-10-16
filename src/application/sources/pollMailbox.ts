@@ -18,22 +18,20 @@ import { notifiesTruncatedDigest, type TruncatedNewAdsDigest, truncatedNewAdsDig
 import { daysBefore } from '../../domain/time/daysBefore.js';
 import type { IngestDependencies } from '../ingest/ingestListing.js';
 import { notifyTruncatedDigest } from '../notifications/notifyTruncatedDigest.js';
-import type { EmailContent, EmailMessage, EmailReading, ListingExtractor, PendingLink } from '../ports/listingExtractor.js';
+import type { EmailMessage, EmailReading } from '../ports/listingExtractor.js';
 import type { Logger } from '../ports/logger.js';
 import type { MailboxReader, MailboxSession } from '../ports/mailboxReader.js';
 import type { EmailReadingSummary, MailboxStateRepository } from '../ports/mailboxStateRepository.js';
-import type { RedirectResolver } from '../ports/redirectResolver.js';
 import type { SourceRunRepository } from '../ports/sourceRunRepository.js';
 import { describeMailboxFailure } from './describeMailboxFailure.js';
 import { errorMessage } from './errorMessage.js';
 import { ingestInTurn } from './ingestInTurn.js';
+import { type AlertEmailReadingDependencies, readAlertEmail } from './readAlertEmail.js';
 import type { SourceRunSummary } from './sourceRunSummary.js';
 
-export interface PollMailboxDependencies extends IngestDependencies {
+export interface PollMailboxDependencies extends IngestDependencies, AlertEmailReadingDependencies {
   readonly mailboxReader: MailboxReader;
   readonly mailboxState: MailboxStateRepository;
-  readonly extractor: ListingExtractor;
-  readonly redirectResolver: RedirectResolver;
   readonly sourceRuns: SourceRunRepository;
   readonly logger: Logger;
 }
@@ -97,24 +95,6 @@ const recordConfirmation = (dependencies: PollMailboxDependencies, email: EmailM
   dependencies.logger.info(alertConfirmedLog(confirmation.site, confirmation.criteria));
 };
 
-const resolvedDestinations = async (resolver: RedirectResolver, links: readonly PendingLink[]): Promise<ReadonlyMap<string, string>> => {
-  const destinations = await Promise.all(
-    links.slice(0, MAX_LINKS_RESOLVED_PER_EMAIL).map(async (link) => [link.href, await resolver.resolve(link.href)] as const),
-  );
-  return new Map(destinations.flatMap(([href, destination]) => (destination ? [[href, destination] as const] : [])));
-};
-
-const readListings = async (dependencies: PollMailboxDependencies, content: EmailContent): Promise<EmailReading> => {
-  const firstReading = dependencies.extractor.listingsFromEmail(content, new Map());
-  if (firstReading.pendingLinks.length === 0) {
-    return firstReading;
-  }
-  return dependencies.extractor.listingsFromEmail(
-    content,
-    await resolvedDestinations(dependencies.redirectResolver, firstReading.pendingLinks),
-  );
-};
-
 const announceTruncatedDigest = async (
   dependencies: PollMailboxDependencies,
   digest: TruncatedNewAdsDigest | undefined,
@@ -165,13 +145,11 @@ const readEmail = async (
     return { kind: 'alreadyProcessed' };
   }
   recordConfirmation(dependencies, email);
-  const reading = await readListings(dependencies, {
-    messageId,
-    from: email.from,
-    subject: email.subject,
-    html: email.html,
-    text: email.text,
-  });
+  const reading = await readAlertEmail(
+    dependencies,
+    { messageId, from: email.from, subject: email.subject, html: email.html, text: email.text },
+    MAX_LINKS_RESOLVED_PER_EMAIL,
+  );
   const subjectReading: SubjectReading = { kind: classifyEmail(email.subject), announced: announcedCount(email.subject) };
   const digest = truncatedNewAdsDigest({ site: reading.site, ...subjectReading, received: reading.listings.length });
   await announceTruncatedDigest(dependencies, digest, reading.moreUrl);

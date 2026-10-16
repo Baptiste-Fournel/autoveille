@@ -3,12 +3,14 @@ import type { SpecialReason } from '../../domain/filtering/verdict.js';
 import { vehicleMessage } from '../../domain/messaging/vehicleMessage.js';
 import type { Settings } from '../../domain/settings/types.js';
 import { EVENT_TYPES } from '../../domain/vehicle/events.js';
+import { type VehicleShowcase, vehicleShowcase } from '../../domain/vehicle/showcase.js';
 import type { Listing, Status, Vehicle } from '../../domain/vehicle/types.js';
 import type { VehicleRepository } from '../ports/vehicleRepository.js';
 
 export interface VehicleCard {
   readonly vehicle: Vehicle;
   readonly listings: readonly Listing[];
+  readonly showcase: VehicleShowcase;
   readonly specialReason: SpecialReason | undefined;
   readonly message: string;
   readonly contactedAt: string | null;
@@ -31,6 +33,7 @@ export function vehicleCard(vehicles: CardReader, vehicle: Vehicle, settings: Se
   return {
     vehicle,
     listings,
+    showcase: vehicleShowcase(vehicle, listings),
     specialReason: vehicleSpecialReason(vehicle, firstListing, settings),
     message: vehicleMessage(vehicle, firstListing, settings),
     contactedAt: contactedAt(vehicles, vehicle),

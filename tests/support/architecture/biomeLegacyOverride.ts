@@ -2,7 +2,7 @@ import { locate } from './location.js';
 
 const sourceFile = /\.[cm]?[jt]sx?$/;
 
-const legacyAreas = ['otherSource', 'public'];
+const legacyAreas = ['public'];
 
 const isLegacyLocation = (path: string): boolean => legacyAreas.includes(locate(path).area);
 

@@ -66,6 +66,7 @@ exports[`annonces écartées > les écartées pour leur kilométrage 1`] = `
       "suivies": 3,
       "tous": 4,
     },
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Bordeaux",
@@ -143,6 +144,7 @@ exports[`annonces écartées > les écartées pour leur marque 1`] = `
       "suivies": 3,
       "tous": 4,
     },
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Mérignac",
@@ -220,6 +222,7 @@ exports[`annonces écartées > les écartées qui ne sont ni supercar ni collect
       "suivies": 3,
       "tous": 4,
     },
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Talence",
@@ -297,6 +300,7 @@ exports[`annonces écartées > les écartées trop loin de la concession 1`] = `
       "suivies": 3,
       "tous": 4,
     },
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Angoulême",
@@ -375,6 +379,7 @@ exports[`annonces écartées > les écartées vendues par un professionnel 1`] =
       "suivies": 3,
       "tous": 4,
     },
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Angoulême",
@@ -453,6 +458,7 @@ exports[`annonces écartées > par défaut, les écartées montrent celles des m
       "suivies": 3,
       "tous": 4,
     },
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Angoulême",
@@ -647,6 +653,7 @@ exports[`annonces écartées > toutes les écartées, marques non suivies compri
       "suivies": 3,
       "tous": 4,
     },
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Mérignac",
@@ -934,7 +941,7 @@ exports[`connexion > le bon mot de passe ouvre une session sur un nouvel apparei
     "ok": true,
   },
   "cookie": "posée",
-  "cookieAttributes": "Max-Age=34560000; Path=/; HttpOnly; SameSite=Lax",
+  "cookieAttributes": "Max-Age=15552000; Path=/; HttpOnly; SameSite=Lax",
   "status": 200,
 }
 `;
@@ -1465,6 +1472,7 @@ exports[`import ponctuel > une date pour une annonce inconnue est comptée à pa
 exports[`liste des annonces retenues > limitée aux trois derniers jours, la liste laisse de côté la voiture vue la semaine dernière 1`] = `
 {
   "body": {
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Blanquefort",
@@ -1878,6 +1886,7 @@ Si ce n'est pas d'actualité, ne vous embêtez pas à répondre, je n'insisterai
 exports[`liste des annonces retenues > limitée à deux annonces, la liste garde les plus récentes 1`] = `
 {
   "body": {
+    "nextCursor": "<curseur>",
     "vehicles": [
       {
         "city": "Blanquefort",
@@ -2000,6 +2009,7 @@ Si ce n'est pas le moment, pas de souci, je ne vous relancerai pas.",
 exports[`liste des annonces retenues > l’onglet des annonces ignorées 1`] = `
 {
   "body": {
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Gradignan",
@@ -2066,6 +2076,7 @@ Si vous préférez vendre seul, aucun problème, je n'insisterai pas.",
 exports[`liste des annonces retenues > l’onglet des vendeurs contactés 1`] = `
 {
   "body": {
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Pessac",
@@ -2132,6 +2143,7 @@ Si vous préférez vendre par vous-même, aucun problème, je n'insisterai pas."
 exports[`liste des annonces retenues > l’onglet des vendeurs qui ont répondu 1`] = `
 {
   "body": {
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Saint-Médard-en-Jalles",
@@ -2198,6 +2210,7 @@ Si ce n'est pas d'actualité, ne vous embêtez pas à répondre, je n'insisterai
 exports[`liste des annonces retenues > par défaut, la liste montre les annonces nouvelles 1`] = `
 {
   "body": {
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Blanquefort",
@@ -2499,6 +2512,7 @@ Si ce n'est pas d'actualité, ne vous embêtez pas à répondre, je n'insisterai
 exports[`liste des annonces retenues > toutes les annonces retenues, quel que soit leur suivi 1`] = `
 {
   "body": {
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Blanquefort",
@@ -2968,6 +2982,7 @@ Si ce n'est pas d'actualité, ne vous embêtez pas à répondre, je n'insisterai
 exports[`liste des annonces retenues > un onglet inconnu retombe sur les annonces nouvelles 1`] = `
 {
   "body": {
+    "nextCursor": null,
     "vehicles": [
       {
         "city": "Blanquefort",
@@ -3329,7 +3344,7 @@ exports[`première connexion > avec un code de première connexion configuré, l
     "ok": true,
   },
   "cookie": "posée",
-  "cookieAttributes": "Max-Age=34560000; Path=/; HttpOnly; SameSite=Lax",
+  "cookieAttributes": "Max-Age=15552000; Path=/; HttpOnly; SameSite=Lax",
   "status": 200,
 }
 `;
@@ -3351,7 +3366,7 @@ exports[`première connexion > le concessionnaire choisit son mot de passe depui
     "ok": true,
   },
   "cookie": "posée",
-  "cookieAttributes": "Max-Age=34560000; Path=/; HttpOnly; SameSite=Lax",
+  "cookieAttributes": "Max-Age=15552000; Path=/; HttpOnly; SameSite=Lax",
   "status": 200,
 }
 `;
@@ -3406,19 +3421,19 @@ exports[`première connexion derrière le proxy > derrière le proxy HTTPS, le c
     "ok": true,
   },
   "cookie": "posée",
-  "cookieAttributes": "Max-Age=34560000; Path=/; HttpOnly; Secure; SameSite=Lax",
+  "cookieAttributes": "Max-Age=15552000; Path=/; HttpOnly; Secure; SameSite=Lax",
   "status": 200,
 }
 `;
 
-exports[`première connexion derrière le proxy > une première connexion relayée avec X-Forwarded-For 127.0.0.1 passe pour la machine elle-même 1`] = `
+exports[`première connexion derrière le proxy > une première connexion venue d’Internet qui se dit relayée pour 127.0.0.1 est refusée comme un code faux 1`] = `
 {
   "body": {
-    "ok": true,
+    "error": "Code de première connexion incorrect.",
   },
-  "cookie": "posée",
-  "cookieAttributes": "Max-Age=34560000; Path=/; HttpOnly; SameSite=Lax",
-  "status": 200,
+  "cookie": "absente",
+  "cookieAttributes": "",
+  "status": 403,
 }
 `;
 

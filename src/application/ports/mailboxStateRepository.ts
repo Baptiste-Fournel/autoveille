@@ -17,7 +17,7 @@ export interface EmailReadingSummary {
   readonly pending: number;
   readonly ignored: number;
   readonly announced?: number;
-  readonly kind: EmailKind;
+  readonly kind?: EmailKind;
   readonly moreUrl?: string;
 }
 

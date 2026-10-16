@@ -52,25 +52,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "src/api.ts",
-        "src/auth.ts",
-        "src/db.ts",
-        "src/demo.ts",
-        "src/server.ts",
-        "src/cli/demo.ts",
-        "src/cli/parse-email.ts",
-        "src/sources/email/confirmations.ts",
-        "src/sources/email/parse.ts",
-        "src/sources/http.ts",
-        "src/sources/sites.ts",
-        "src/geo/**",
-        "public/app.js",
-        "public/sw.js",
-        "public/index.html",
-        "public/styles.css",
-        "public/icons/icon.svg"
-      ],
+      "includes": ["public/app.js", "public/sw.js", "public/index.html", "public/styles.css", "public/icons/icon.svg"],
       "formatter": {
         "enabled": false
       },
@@ -87,13 +69,10 @@
             "useOptionalChain": "off"
           },
           "correctness": {
-            "noInnerDeclarations": "off",
-            "noUnusedFunctionParameters": "off",
             "noUnusedVariables": "off"
           },
           "style": {
             "noDescendingSpecificity": "off",
-            "noNonNullAssertion": "off",
             "useConst": "off",
             "useTemplate": "off"
           },

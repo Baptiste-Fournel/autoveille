@@ -1,36 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import type { SitePage } from '../../../src/application/ports/siteFetcher.js';
 import { fetchHttpSites, httpSitesFetching } from '../../../src/application/sources/fetchHttpSites.js';
 import type { HttpSite } from '../../../src/domain/settings/types.js';
-import { fakeListingExtractor } from '../../fakes/fakeListingExtractor.js';
-import { fakeSiteFetcher } from '../../fakes/fakeSiteFetcher.js';
-import { settingsWithDealerMailbox } from '../../support/dealerMailbox.js';
-import { LEPARKING_BMW_M3_RESULTS, LEPARKING_BMW_M3_SEARCH } from '../../support/leparkingListings.js';
-import { mailWorld } from '../../support/mailWorld.js';
+import { httpSitesWorld, LEPARKING_PAGE, LEPARKING_SITE } from '../../support/httpSitesWorld.js';
+import { LEPARKING_BMW_M3_SEARCH } from '../../support/leparkingListings.js';
 
 const LACENTRALE_PORSCHE_SEARCH = 'https://www.lacentrale.fr/listing?makesModelsCommercialNames=PORSCHE';
 const LEBONCOIN_911_SEARCH = 'https://www.leboncoin.fr/recherche?category=2&text=porsche%20911';
 
-const leparking: HttpSite = { id: 'k3v9x2ab', name: 'Leparking', url: LEPARKING_BMW_M3_SEARCH, enabled: true };
 const laCentrale: HttpSite = { id: 'p7q2m4cd', name: 'La Centrale', url: LACENTRALE_PORSCHE_SEARCH, enabled: true };
-
-const leparkingPage: SitePage = { kind: 'page', url: LEPARKING_BMW_M3_SEARCH, html: '<html>…</html>' };
-
-const httpWorld = (httpSites: readonly HttpSite[], pages: Readonly<Record<string, SitePage>>) => {
-  const world = mailWorld([], { settings: settingsWithDealerMailbox({ httpSites }) });
-  return {
-    ...world,
-    siteFetcher: fakeSiteFetcher(pages),
-    extractor: fakeListingExtractor({
-      pages: { [LEPARKING_BMW_M3_SEARCH]: { listings: LEPARKING_BMW_M3_RESULTS, method: 'structuredData' } },
-    }),
-  };
-};
 
 describe('lecture des sites lus directement', () => {
   it('la recherche Leparking des BMW M3 : six annonces lues, trois nouvelles retenues, et le passage le dit sur l’écran Sites', async () => {
     // Given
-    const world = httpWorld([leparking], { [LEPARKING_BMW_M3_SEARCH]: leparkingPage });
+    const world = httpSitesWorld([LEPARKING_SITE], { [LEPARKING_BMW_M3_SEARCH]: LEPARKING_PAGE });
 
     // When
     const summaries = await fetchHttpSites(world);
@@ -44,7 +26,7 @@ describe('lecture des sites lus directement', () => {
 
   it('relue le lendemain, la même recherche ne compte plus aucune nouvelle annonce', async () => {
     // Given
-    const world = httpWorld([leparking], { [LEPARKING_BMW_M3_SEARCH]: leparkingPage });
+    const world = httpSitesWorld([LEPARKING_SITE], { [LEPARKING_BMW_M3_SEARCH]: LEPARKING_PAGE });
     await fetchHttpSites(world);
     world.clock.advanceBy(86_400_000);
 
@@ -60,9 +42,9 @@ describe('lecture des sites lus directement', () => {
 
   it('La Centrale interdite par son robots.txt : le refus est enregistré tel quel, et la recherche Leparking est lue quand même', async () => {
     // Given
-    const world = httpWorld([laCentrale, leparking], {
+    const world = httpSitesWorld([laCentrale, LEPARKING_SITE], {
       [LACENTRALE_PORSCHE_SEARCH]: { kind: 'disallowedByRobots' },
-      [LEPARKING_BMW_M3_SEARCH]: leparkingPage,
+      [LEPARKING_BMW_M3_SEARCH]: LEPARKING_PAGE,
     });
 
     // When
@@ -85,7 +67,7 @@ describe('lecture des sites lus directement', () => {
   it('Leboncoin limite les lectures (HTTP 429) : le refus est enregistré, sans nouvel essai', async () => {
     // Given
     const leboncoin: HttpSite = { id: 'w8r5t1ef', name: 'Leboncoin', url: LEBONCOIN_911_SEARCH, enabled: true };
-    const world = httpWorld([leboncoin], { [LEBONCOIN_911_SEARCH]: { kind: 'refused', status: 429 } });
+    const world = httpSitesWorld([leboncoin], { [LEBONCOIN_911_SEARCH]: { kind: 'refused', status: 429 } });
 
     // When
     const summaries = await fetchHttpSites(world);
@@ -99,7 +81,7 @@ describe('lecture des sites lus directement', () => {
 
   it('un site désactivé après un refus, ou ajouté sans adresse, n’est pas lu', async () => {
     // Given
-    const world = httpWorld(
+    const world = httpSitesWorld(
       [
         { ...laCentrale, enabled: false },
         { id: 'z1y2x3wv', name: 'Site', url: '', enabled: true },
@@ -120,7 +102,7 @@ describe('lecture des sites lus directement', () => {
 describe('une seule lecture des sites à la fois', () => {
   it('une vérification demandée pendant la lecture des sites ne relance pas de lecture et ne rend rien', async () => {
     // Given
-    const world = httpWorld([leparking], { [LEPARKING_BMW_M3_SEARCH]: leparkingPage });
+    const world = httpSitesWorld([LEPARKING_SITE], { [LEPARKING_BMW_M3_SEARCH]: LEPARKING_PAGE });
     const fetching = httpSitesFetching(world);
 
     // When
@@ -134,7 +116,7 @@ describe('une seule lecture des sites à la fois', () => {
 
   it('une fois la lecture terminée, la vérification suivante relit les sites', async () => {
     // Given
-    const world = httpWorld([leparking], { [LEPARKING_BMW_M3_SEARCH]: leparkingPage });
+    const world = httpSitesWorld([LEPARKING_SITE], { [LEPARKING_BMW_M3_SEARCH]: LEPARKING_PAGE });
     const fetching = httpSitesFetching(world);
     await fetching.fetchAll();
 

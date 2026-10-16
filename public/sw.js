@@ -13,7 +13,7 @@ self.addEventListener('activate', (event) => {
 // Réseau d'abord pour tout ; la coque en secours quand le réseau est coupé.
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/')) return;
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
   event.respondWith(fetch(event.request).then((res) => {
     if (res.ok && SHELL.includes(url.pathname)) caches.open(CACHE).then((c) => c.put(event.request, res.clone()));
     return res;

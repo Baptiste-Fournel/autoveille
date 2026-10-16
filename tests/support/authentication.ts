@@ -10,6 +10,8 @@ import { type FakeSessionRepository, fakeSessionRepository } from '../fakes/fake
 
 export const OWNER_PASSWORD = 'garage-bordeaux-2026';
 
+export const SESSION_COOKIE = 'av_session';
+
 export const OWNER_PASSWORD_HASH = fakePasswordHasher().hash(OWNER_PASSWORD);
 
 export const SETUP_CODE = '4821-7730';

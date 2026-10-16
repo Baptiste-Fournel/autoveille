@@ -1,10 +1,11 @@
-/** Charge des annonces d'exemple dans la base locale :  npm run demo */
-import path from 'node:path';
-import { config } from '../config.js';
-import { Store } from '../db.js';
-import { Pipeline } from '../pipeline.js';
-import { seedDemo } from '../demo.js';
+import { seedDemo } from '../application/ingest/seedDemo.js';
+import { DEMO_COMMAND_DONE_TEXT } from '../domain/presentation/commands.js';
+import { buildApplication, readConfig, systemEnvironment } from '../main.js';
 
-const store = new Store(path.join(config.dataDir, 'autoveille.sqlite'));
-await seedDemo(store, new Pipeline(store));
-console.log('Annonces de démonstration chargées.');
+const application = await buildApplication(systemEnvironment(readConfig(), false));
+try {
+  await seedDemo(application.ports);
+  console.log(DEMO_COMMAND_DONE_TEXT);
+} finally {
+  await application.stop();
+}

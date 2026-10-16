@@ -3,7 +3,7 @@ import type { Clock } from '../ports/clock.js';
 import type { Random } from '../ports/random.js';
 import type { Session, SessionRepository } from '../ports/sessionRepository.js';
 
-const SESSION_LIFETIME_DAYS = 180;
+export const SESSION_LIFETIME_DAYS = 180;
 
 const SESSION_TOKEN_BYTES = 32;
 

@@ -14,9 +14,7 @@ export type ExceptionReview = {
 
 const legacyFile = 'tests/support/architecture/legacy.ts';
 
-const legacyCommandLineTools = ['src/cli/demo.ts', 'src/cli/parse-email.ts'];
-
-const legacyAreas = ['otherSource', 'public'];
+const legacyAreas = ['public'];
 
 const staleness = (exception: LegacyException, violations: readonly Violation[], scannedPaths: readonly string[]): readonly string[] => {
   if (!scannedPaths.includes(exception.path)) {
@@ -30,7 +28,7 @@ const staleness = (exception: LegacyException, violations: readonly Violation[],
     .map((rule) => `${exception.path} respecte désormais la règle « ${rule} » : la retirer de son entrée dans ${legacyFile}`);
 };
 
-const isLegacyPath = (path: string): boolean => legacyAreas.includes(locate(path).area) || legacyCommandLineTools.includes(path);
+const isLegacyPath = (path: string): boolean => legacyAreas.includes(locate(path).area);
 
 const invalidity = (exception: LegacyException, index: number, exceptions: readonly LegacyException[]): readonly string[] => [
   ...(isLegacyPath(exception.path)

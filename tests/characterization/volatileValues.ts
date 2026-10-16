@@ -4,6 +4,7 @@ const ISO_INSTANT = /(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}:\d{2}((?:\.\d{1,3})?(?:Z|[+
 const IMPORT_TOKEN = /^[0-9a-f]{48}$/;
 const VAPID_PUBLIC_KEY = /^B[A-Za-z0-9_-]{86}$/;
 const CLOCK_READ_WINDOW = 6 * 3_600_000;
+const NEXT_PAGE_CURSOR = 'nextCursor';
 
 const readOnFrozenClock = (iso: string): boolean => {
   const instant = Date.parse(iso);
@@ -23,7 +24,12 @@ export function withoutVolatileValues(value: unknown): unknown {
   if (typeof value === 'string') return normalizeText(value);
   if (Array.isArray(value)) return value.map((item: unknown) => withoutVolatileValues(item));
   if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(Object.entries(value).map(([key, item]: [string, unknown]) => [key, withoutVolatileValues(item)]));
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]: [string, unknown]) => [
+        key,
+        key === NEXT_PAGE_CURSOR && typeof item === 'string' ? '<curseur>' : withoutVolatileValues(item),
+      ]),
+    );
   }
   return value;
 }

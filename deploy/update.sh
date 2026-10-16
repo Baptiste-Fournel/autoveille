@@ -33,5 +33,12 @@ npm ci --ignore-scripts --no-audit --no-fund >/dev/null
 npm run build >/dev/null
 npm prune --omit=dev --no-audit --no-fund >/dev/null
 chown -R autoveille:autoveille /opt/autoveille
+# Un serveur installé avant la refonte lance encore dist/server.js ; le point d'entrée est désormais dist/server/main.js.
+UNIT=/etc/systemd/system/autoveille.service
+if [ -f "$UNIT" ] && grep -q '^ExecStart=.* dist/server\.js$' "$UNIT"; then
+  sed -i 's#^\(ExecStart=.*\) dist/server\.js$#\1 dist/server/main.js#' "$UNIT"
+  echo "Service : ExecStart corrigé vers dist/server/main.js"
+fi
+systemctl daemon-reload
 systemctl restart autoveille
 echo "AutoVeille mis à jour et redémarré."

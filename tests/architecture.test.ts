@@ -1088,25 +1088,51 @@ describe('liste des exceptions et override Biome du code hérité', () => {
     ]);
   });
 
-  it('deux entrées pour le même fichier hérité sont signalées', () => {
+  it('une exception accordée à la commande de démo réécrite sur la composition est refusée', () => {
     // Given
-    const exceptions = [
-      { path: 'src/api.ts', rules: ['placement'] },
-      { path: 'src/api.ts', rules: ['comment'] },
-    ] as const;
+    const exceptions = [{ path: 'src/cli/demo.ts', rules: ['comment'] }] as const;
 
     // When
-    const review = reviewExceptions([], exceptions, ['src/api.ts']);
+    const review = reviewExceptions([], exceptions, ['src/cli/demo.ts']);
 
     // Then
     expect(review.invalidExceptions).toEqual([
-      "src/api.ts a plusieurs entrées dans tests/support/architecture/legacy.ts : n'en garder qu'une",
+      "src/cli/demo.ts est un emplacement de la nouvelle architecture : aucune exception n'y est permise dans tests/support/architecture/legacy.ts, corriger le fichier",
+    ]);
+  });
+
+  it('une exception accordée à un utils.ts posé à la racine de src/ est refusée', () => {
+    // Given
+    const exceptions = [{ path: 'src/utils.ts', rules: ['placement'] }] as const;
+
+    // When
+    const review = reviewExceptions([], exceptions, ['src/utils.ts']);
+
+    // Then
+    expect(review.invalidExceptions).toEqual([
+      "src/utils.ts est un emplacement de la nouvelle architecture : aucune exception n'y est permise dans tests/support/architecture/legacy.ts, corriger le fichier",
+    ]);
+  });
+
+  it('deux entrées pour le même fichier hérité sont signalées', () => {
+    // Given
+    const exceptions = [
+      { path: 'public/app.js', rules: ['comment'] },
+      { path: 'public/app.js', rules: ['globalState'] },
+    ] as const;
+
+    // When
+    const review = reviewExceptions([], exceptions, ['public/app.js']);
+
+    // Then
+    expect(review.invalidExceptions).toEqual([
+      "public/app.js a plusieurs entrées dans tests/support/architecture/legacy.ts : n'en garder qu'une",
     ]);
   });
 
   it('un override Biome qui relâche src/*.ts et src/cli/** engloberait le futur main.ts et la CLI réécrite', () => {
     // Given
-    const includes = ['src/*.ts', 'src/cli/**', 'src/listings/**'];
+    const includes = ['src/*.ts', 'src/cli/**', 'public/icons/**'];
 
     // When
     const problems = reviewBiomeLegacyOverride(includes, [], () => true);
@@ -1115,6 +1141,19 @@ describe('liste des exceptions et override Biome du code hérité', () => {
     expect(problems).toEqual([
       '« src/*.ts » est un motif qui engloberait du code neuf (src/main.ts, src/cli/…) : nommer les fichiers hérités un par un',
       '« src/cli/** » couvre un emplacement de la nouvelle architecture : nommer les fichiers hérités un par un',
+    ]);
+  });
+
+  it("un override Biome qui relâcherait encore l'ancien dossier src/listings/ couvrirait du code neuf", () => {
+    // Given
+    const includes = ['src/listings/**'];
+
+    // When
+    const problems = reviewBiomeLegacyOverride(includes, [], () => true);
+
+    // Then
+    expect(problems).toEqual([
+      '« src/listings/** » couvre un emplacement de la nouvelle architecture : nommer les fichiers hérités un par un',
     ]);
   });
 

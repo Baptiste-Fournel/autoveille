@@ -12,6 +12,7 @@ function el(tag, attrs = {}, ...children) {
     else if (k === 'html') node.innerHTML = v;
     else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
     else if (k === 'dataset') Object.assign(node.dataset, v);
+    else if (k === 'style' && typeof v === 'string') node.style.cssText = v;
     else if (k in node && k !== 'style' && typeof v !== 'string') node[k] = v;
     else node.setAttribute(k, v === true ? '' : v);
   }
@@ -216,7 +217,7 @@ async function loadOverview() { state.overview = await api('GET', '/api/overview
 
 async function renderAnnonces() {
   const kind = state.kind || 'suivies';
-  const [ov, data] = await Promise.all([api('GET', '/api/overview'), api('GET', `/api/vehicles?status=${state.filter}${state.filter === 'ecartees' ? `&kind=${kind}` : ''}`)]);
+  const [ov, data] = await Promise.all([api('GET', '/api/overview'), api('GET', `/api/vehicles?status=${state.filter}${state.filter === 'ecartees' ? `&kind=${kind}` : ''}&limit=1000`)]);
   state.overview = ov; state.vehicles = data.vehicles;
   const c = ov.counts;
   const filters = [['nouveau', 'À traiter', c.nouveau], ['contacte', 'Contactées', c.contacte], ['repondu', 'Ont répondu', c.repondu], ['ignore', 'Ignorées', c.ignore], ['ecartees', 'Écartées par les filtres'], ['tous', 'Toutes']];
@@ -622,7 +623,7 @@ async function renderAnnonceDetail(route) {
 // ---------- mode rafale ----------
 /** Vehicles to process, one after the other, with the confirmation shown when the person comes back to the app. */
 async function renderRafale() {
-  const data = await api('GET', '/api/vehicles?status=nouveau');
+  const data = await api('GET', '/api/vehicles?status=nouveau&limit=1000');
   const queue = data.vehicles.filter((v) => v.matched && !v.doNotContact);
   const r = state.rafale && state.rafale.ids.length ? state.rafale : (state.rafale = { ids: queue.map((v) => v.id), index: 0, sent: 0, ignored: 0, skipped: 0 });
   // Vehicles handled elsewhere in the meantime disappear from the queue.

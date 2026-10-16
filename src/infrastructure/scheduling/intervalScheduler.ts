@@ -15,6 +15,8 @@ export interface ScheduledSources {
   readonly httpSites: Pick<HttpSitesFetching, 'fetchAll'>;
 }
 
+export type FailureReport = (error: unknown) => void;
+
 export interface PollingCadence {
   readonly mailboxMinutes: number;
   readonly httpSitesMinutes: number;
@@ -25,18 +27,21 @@ export class IntervalScheduler<Handle> {
 
   private readonly timers: Timers<Handle>;
 
+  private readonly reportFailure: FailureReport;
+
   private intervals: readonly Handle[] = [];
 
   private firstRuns: readonly Handle[] = [];
 
-  constructor(sources: ScheduledSources, timers: Timers<Handle>) {
+  constructor(sources: ScheduledSources, timers: Timers<Handle>, reportFailure: FailureReport) {
     this.sources = sources;
     this.timers = timers;
+    this.reportFailure = reportFailure;
   }
 
   start(cadence: PollingCadence): void {
-    const pollMailbox = (): void => void this.sources.mailbox.poll();
-    const fetchHttpSites = (): void => void this.sources.httpSites.fetchAll();
+    const pollMailbox = (): void => void this.sources.mailbox.poll().catch(this.reportFailure);
+    const fetchHttpSites = (): void => void this.sources.httpSites.fetchAll().catch(this.reportFailure);
     this.intervals = [
       ...this.intervals,
       this.timers.setInterval(pollMailbox, Math.max(MIN_MAILBOX_MINUTES, cadence.mailboxMinutes) * MINUTE_MS),

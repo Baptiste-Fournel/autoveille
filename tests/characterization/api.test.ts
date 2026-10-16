@@ -1,5 +1,6 @@
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { type LegacyApp, type LegacyAppOptions, type LegacyResponse, OWNER_PASSWORD, startLegacyApp } from './legacyApp.js';
+import { OWNER_PASSWORD } from '../support/authentication.js';
+import { type ContractApp, type ContractAppOptions, type ContractResponse, startContractApp } from './contractApp.js';
 import { withoutVolatileValues } from './volatileValues.js';
 
 const PORSCHE_911_PRICE_DROP = ['leboncoin', '2811001234'] as const;
@@ -11,19 +12,19 @@ const PORSCHE_944_REPLIED = ['leboncoin', '2810004321'] as const;
 const BMW_M3_E46_128000_KM = ['leboncoin', '2811009999'] as const;
 const IMAP_ACCOUNT = { host: 'imap.gmail.com', port: 993, user: 'concession.veille@example.com', mailbox: 'INBOX' } as const;
 
-async function freshApp(options?: LegacyAppOptions): Promise<LegacyApp> {
-  const app = await startLegacyApp(options);
+async function freshApp(options?: ContractAppOptions): Promise<ContractApp> {
+  const app = await startContractApp(options);
   onTestFinished(() => app.stop());
   return app;
 }
 
-async function signedIn(): Promise<{ readonly app: LegacyApp; readonly session: string }> {
+async function signedIn(): Promise<{ readonly app: ContractApp; readonly session: string }> {
   const app = await freshApp();
   const session = await app.signIn();
   return { app, session };
 }
 
-function contract(response: LegacyResponse): { readonly status: number; readonly body: unknown } {
+function contract(response: ContractResponse): { readonly status: number; readonly body: unknown } {
   return { status: response.status, body: withoutVolatileValues(response.body) };
 }
 
@@ -174,7 +175,7 @@ describe('première connexion derrière le proxy', () => {
     expect({ status, body, cookie: response.sessionCookie, cookieAttributes: response.cookieAttributes }).toMatchSnapshot();
   });
 
-  it('une première connexion relayée avec X-Forwarded-For 127.0.0.1 passe pour la machine elle-même', async () => {
+  it('une première connexion venue d’Internet qui se dit relayée pour 127.0.0.1 est refusée comme un code faux', async () => {
     // Given
     const app = await freshApp();
 
