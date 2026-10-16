@@ -76,6 +76,8 @@ ENV
 fi
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 chmod 600 "$APP_DIR/.env"
+# La base et ses copies contiennent le mot de passe de la boîte mail, les sessions et les clés.
+chmod 700 "$APP_DIR/data"
 
 if [ -n "${SSH_KEY:-}" ]; then
   log "Clé SSH d'administration"
@@ -109,6 +111,11 @@ systemctl daemon-reload
 systemctl enable --now autoveille >/dev/null
 systemctl restart autoveille
 
+log "Sauvegarde quotidienne de la base (data/backups/, 14 gardées)"
+install -m 644 "$APP_DIR/deploy/autoveille-backup.service" "$APP_DIR/deploy/autoveille-backup.timer" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now autoveille-backup.timer >/dev/null
+
 PUBLIC_IP="$(curl -4 -s --max-time 10 https://api.ipify.org || curl -4 -s --max-time 10 https://ifconfig.me || true)"
 DOMAIN="${DOMAIN:-${PUBLIC_IP//./-}.sslip.io}"
 log "HTTPS pour https://$DOMAIN"
@@ -122,7 +129,7 @@ cat > /root/autoveille-setup.txt <<TXT
 AutoVeille est installé.
 Adresse : https://$DOMAIN
 Code de première connexion : $SETUP_CODE
-Mettre à jour : sudo bash $APP_DIR/deploy/update.sh
+Mettre à jour : sudo -u $APP_USER git -C $APP_DIR pull, puis sudo bash $APP_DIR/deploy/update.sh (README.md, section « Exploitation » : version à noter avant, retour arrière)
 TXT
 echo
 cat /root/autoveille-setup.txt

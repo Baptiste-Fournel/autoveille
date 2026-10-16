@@ -5,3 +5,4 @@ data/
 *.sqlite*
 !*.sqlite.test.ts
 test-results/
+playwright-report/

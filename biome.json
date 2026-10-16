@@ -8,6 +8,7 @@
       "!!**/data",
       "!!**/coverage",
       "!!**/test-results",
+      "!!**/playwright-report",
       "!package-lock.json",
       "!tests/fixtures/**/*.html",
       "!tests/fixtures/**/*.eml",

@@ -276,6 +276,26 @@ describe('migrations SQLite numérotées par PRAGMA user_version', () => {
       expect(migrated.schema.userVersion).toBe(LATEST_VERSION);
     }));
 
+  it('revenu à cette version après une mise à jour qui a migré la base une version plus loin, le serveur refuse de démarrer sans toucher à la base, et le journal dit quoi faire', () =>
+    inTemporaryDirectory((dir) => {
+      // Given
+      const file = join(dir, 'autoveille.sqlite');
+      buildLegacyDatabase(file);
+      migrateFile(file);
+      readFile(file, (db) => db.pragma(`user_version = ${LATEST_VERSION + 1}`));
+      const before = readFile(file, (db) => ({ schema: describeSchema(db), content: contentOf(db) }));
+
+      // When
+      const failure = errorOf(() => migrateFile(file));
+
+      // Then
+      expect(failure).toBe(
+        `Base de données en version ${LATEST_VERSION + 1}, plus récente que cette version de l’application (version ${LATEST_VERSION} au plus) : une version plus récente l’a déjà migrée. ` +
+          'Démarrage refusé pour ne pas l’abîmer : réinstallez la version plus récente, ou restaurez la sauvegarde prise avant sa mise à jour (README.md, section « Exploitation »).',
+      );
+      expect(readFile(file, (db) => ({ schema: describeSchema(db), content: contentOf(db) }))).toEqual(before);
+    }));
+
   it('une base neuve reçoit le schéma hérité puis les mêmes ajouts : elle a exactement le schéma d’une base de production migrée', () =>
     inTemporaryDirectory((dir) => {
       // Given

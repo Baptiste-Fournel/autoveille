@@ -495,6 +495,28 @@ describe('écran Sites', () => {
     expect(screen.getByLabelText<HTMLInputElement>('Adresse de la page de résultats').value).toBe('');
   });
 
+  it('« Ajouter ce site » pendant le redémarrage du serveur : « Erreur 502 » s’affiche et le formulaire garde le nom et l’adresse collée', async () => {
+    // Given
+    const server = serverForSitesScreen();
+    server.on('PUT', '/api/settings', () => new Response('<html>502 Bad Gateway</html>', { status: 502 }));
+    await openSites(server);
+    fireEvent.input(screen.getByLabelText('Nom du site'), { target: { value: 'Annonces-Automobile' } });
+    fireEvent.input(screen.getByLabelText('Adresse de la page de résultats'), {
+      target: { value: 'https://www.annonces-automobile.com/recherche?marque=porsche' },
+    });
+
+    // When
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter ce site' }));
+    await screen.findByText('Erreur 502');
+    await act(async () => {});
+
+    // Then
+    expect(screen.getByLabelText<HTMLInputElement>('Nom du site').value).toBe('Annonces-Automobile');
+    expect(screen.getByLabelText<HTMLInputElement>('Adresse de la page de résultats').value).toBe(
+      'https://www.annonces-automobile.com/recherche?marque=porsche',
+    );
+  });
+
   it('retirer la page Annonces-Automobile devenue inutile puis « Enregistrer les sites » l’enlève des réglages', async () => {
     // Given
     const annoncesAutomobile = {

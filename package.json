@@ -4,7 +4,7 @@
   "description": "Veille d'annonces automobiles avec messages personnalisés prêts à envoyer",
   "main": "index.js",
   "engines": {
-    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
