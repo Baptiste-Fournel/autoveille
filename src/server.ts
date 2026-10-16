@@ -17,6 +17,14 @@ import { seedDemo } from './demo.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(here, '..', 'public');
 
+const isApiAddress = (address: string) => address.startsWith('/api/');
+// The router decodes the address (/%61pi/settings) and accepts the absolute form (http://host/api/settings):
+// access is decided on the route it found, the raw address only when no API route matched.
+const addressOf = (req: FastifyRequest): string => {
+  const route = req.routeOptions.url;
+  return route && isApiAddress(route) ? route : req.url.split('?')[0];
+};
+
 export async function buildServer(opts: { dataDir?: string; store?: Store } = {}) {
   const store = opts.store ?? new Store(path.join(opts.dataDir ?? config.dataDir, 'autoveille.sqlite'));
   const cookieSecret = ensureSecret(store, 'cookie_secret');
@@ -31,7 +39,7 @@ export async function buildServer(opts: { dataDir?: string; store?: Store } = {}
   await app.register(fastifyCookie, { secret: cookieSecret });
   await app.register(fastifyStatic, { root: publicDir, prefix: '/', cacheControl: false });
   app.addHook('onSend', async (req, reply) => {
-    if (!req.url.startsWith('/api/') && !reply.getHeader('cache-control')) reply.header('cache-control', /\.(png|svg|woff2?)$/.test(req.url) ? 'public, max-age=86400' : 'no-cache');
+    if (!isApiAddress(addressOf(req)) && !reply.getHeader('cache-control')) reply.header('cache-control', /\.(png|svg|woff2?)$/.test(req.url) ? 'public, max-age=86400' : 'no-cache');
   });
 
   const notifier = new AppNotifier(store, {
@@ -60,8 +68,8 @@ export async function buildServer(opts: { dataDir?: string; store?: Store } = {}
   const needsSetup = () => !store.secret('password_hash');
 
   app.addHook('onRequest', async (req, reply) => {
-    if (!req.url.startsWith('/api/')) return;
-    const path = req.url.split('?')[0];
+    const path = addressOf(req);
+    if (!isApiAddress(path)) return;
     if (['/api/me', '/api/login', '/api/setup'].includes(path)) return;
     // The one-off import may come from another site's page (a search page read in the browser): it carries
     // the import token in its body instead of the session cookie, and is checked by its handler.
@@ -111,7 +119,7 @@ export async function buildServer(opts: { dataDir?: string; store?: Store } = {}
   registerApi(app, { store, pipeline, notifier, scheduler, friendlyImapError });
 
   app.setNotFoundHandler((req, reply) => {
-    if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'inconnu' });
+    if (isApiAddress(addressOf(req))) return reply.code(404).send({ error: 'inconnu' });
     return reply.sendFile('index.html');
   });
 
