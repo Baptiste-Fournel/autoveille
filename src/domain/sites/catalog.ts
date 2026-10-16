@@ -92,16 +92,16 @@ export const SITES: readonly SiteDef[] = [
   },
 ];
 
-const belongsTo = (domain: string, parent: string): boolean => domain === parent || domain.endsWith(`.${parent}`);
+export const domainBelongsTo = (domain: string, parent: string): boolean => domain === parent || domain.endsWith(`.${parent}`);
 
 export function siteForHost(host: string): SiteDef | undefined {
   const domain = host.toLowerCase();
-  return SITES.find((site) => site.hosts.some((siteHost) => belongsTo(domain, siteHost)));
+  return SITES.find((site) => site.hosts.some((siteHost) => domainBelongsTo(domain, siteHost)));
 }
 
 export function siteForSender(address: string): SiteDef | undefined {
   const domain = address.toLowerCase().split('@')[1] ?? '';
-  return SITES.find((site) => site.alertSenderDomains.some((senderDomain) => belongsTo(domain, senderDomain)));
+  return SITES.find((site) => site.alertSenderDomains.some((senderDomain) => domainBelongsTo(domain, senderDomain)));
 }
 
 export function siteLabel(key: string): string {

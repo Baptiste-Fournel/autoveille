@@ -14,7 +14,7 @@ const LISTING_PAGE_WORDS = /(annonce|\/ad\/|voiture|auto|occasion|vehicule|véhi
 
 const UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 
-const withoutWww = (host: string): string => host.replace(/^www\./, '');
+export const withoutWww = (host: string): string => host.replace(/^www\./, '');
 
 const TRACKING_QUERY_PARAMETER =
   /^(utm_|mc_|mkt_|ref|refid|src|source|campaign|fbclid|gclid|_ga|sid|eid|cid|tracking|track|cldtidx|ap_tier|position|pos$|idAlerte|ticket|xtor|mailUniqId|mailUniqIdAno|at_|pk_|mkt)/i;

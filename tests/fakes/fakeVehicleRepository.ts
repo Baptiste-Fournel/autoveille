@@ -47,11 +47,11 @@ const sortAtOf = (vehicle: Vehicle): string => vehicle.publishedAt ?? vehicle.fi
 
 const sorted = <T>(items: readonly T[], order: (a: T, b: T) => number): readonly T[] => [...items].sort(order);
 
-const mostRecentlySortedFirst = (a: Vehicle, b: Vehicle): number => compareText(sortAtOf(b), sortAtOf(a)) || b.id - a.id;
+const newestFirstInArrivalOrder = (a: Vehicle, b: Vehicle): number => compareText(sortAtOf(b), sortAtOf(a)) || a.id - b.id;
 
 const comesAfter = (vehicle: Vehicle, cursor: VehicleCursor): boolean => {
   const sortAt = sortAtOf(vehicle);
-  return sortAt < cursor.sortAt || (sortAt === cursor.sortAt && vehicle.id < cursor.id);
+  return sortAt < cursor.sortAt || (sortAt === cursor.sortAt && vehicle.id > cursor.id);
 };
 
 const groupsOf = (vehicle: Vehicle): readonly RejectionGroup[] => vehicle.rejections.map(rejectionGroupOf);
@@ -188,7 +188,7 @@ export const fakeVehicleRepository = (): FakeVehicleRepository => {
             isFirstSeenSince(candidate, query.firstSeenSince) &&
             (query.after === undefined || comesAfter(candidate, query.after)),
         ),
-        mostRecentlySortedFirst,
+        newestFirstInArrivalOrder,
       );
       const vehicles = matching.slice(0, query.limit);
       const last = vehicles.at(-1);

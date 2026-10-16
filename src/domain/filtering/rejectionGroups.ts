@@ -2,7 +2,7 @@ import type { RejectionReason } from './verdict.js';
 
 export type RejectionGroup = 'marque' | 'special' | 'pro' | 'km' | 'loin';
 
-const GROUP_OF_KIND: Readonly<Record<RejectionReason['kind'], RejectionGroup>> = {
+export const REJECTION_GROUP_OF_KIND: Readonly<Record<RejectionReason['kind'], RejectionGroup>> = {
   unfollowedBrand: 'marque',
   disabledBrand: 'marque',
   unknownBrand: 'marque',
@@ -13,5 +13,5 @@ const GROUP_OF_KIND: Readonly<Record<RejectionReason['kind'], RejectionGroup>> =
 };
 
 export function rejectionGroupOf(reason: RejectionReason): RejectionGroup {
-  return GROUP_OF_KIND[reason.kind];
+  return REJECTION_GROUP_OF_KIND[reason.kind];
 }

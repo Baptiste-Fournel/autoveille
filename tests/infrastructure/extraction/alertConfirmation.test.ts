@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { detectAlertConfirmation } from '../../../src/sources/email/confirmations.js';
+import { detectAlertConfirmation } from '../../../src/domain/sites/confirmations.js';
+import { cheerioListingExtractor } from '../../../src/infrastructure/extraction/cheerioListingExtractor.js';
+import { fakeClock } from '../../fakes/fakeClock.js';
 import { loadFixture } from '../../support/fixtures.js';
+
+interface ReceivedEmail {
+  readonly from: string;
+  readonly subject: string;
+  readonly html: string;
+}
+
+const RECEIVED_AT = new Date('2026-10-14T09:12:00.000Z');
+
+const extractor = cheerioListingExtractor(fakeClock());
+
+const confirmationOf = ({ from, subject, html }: ReceivedEmail) =>
+  detectAlertConfirmation({ from, subject, ...extractor.visibleContent({ html }), date: RECEIVED_AT });
 
 describe('emails de confirmation d’alerte des sites', () => {
   it("l'email de confirmation d'alerte La Centrale : 100 000 km, 33000, particuliers et la page de gestion des alertes", () => {
@@ -8,11 +23,7 @@ describe('emails de confirmation d’alerte des sites', () => {
     const html = loadFixture('emails/lacentrale/confirmation-de-creation-d-alerte.html');
 
     // When
-    const confirmation = detectAlertConfirmation({
-      from: 'info@mail-alerte.lacentrale.fr',
-      subject: '     Création de votre alerte ',
-      html,
-    });
+    const confirmation = confirmationOf({ from: 'info@mail-alerte.lacentrale.fr', subject: '     Création de votre alerte ', html });
 
     // Then
     expect(confirmation).toMatchObject({ site: 'lacentrale', maxKm: 100000, postalCode: '33000', sellerType: 'particulier' });
@@ -26,7 +37,7 @@ describe('emails de confirmation d’alerte des sites', () => {
     const html = loadFixture('emails/paruvendu/confirmation-de-creation-d-alerte.html');
 
     // When
-    const confirmation = detectAlertConfirmation({
+    const confirmation = confirmationOf({
       from: 'info@paruvendu.fr',
       subject: 'ParuVendu.fr - Confirmation de la création de votre alerte',
       html,
@@ -43,7 +54,7 @@ describe('emails de confirmation d’alerte des sites', () => {
     const html = loadFixture('emails/autoscout24/confirmation-de-recherche-sauvegardee.html');
 
     // When
-    const confirmation = detectAlertConfirmation({
+    const confirmation = confirmationOf({
       from: 'savedsearches@notifications.autoscout24.com',
       subject: 'Profil de recherche 14/10/2026 : ta recherche a bien été enregistrée',
       html,
@@ -52,6 +63,21 @@ describe('emails de confirmation d’alerte des sites', () => {
     // Then
     expect(confirmation).toMatchObject({ site: 'autoscout24' });
     expect(confirmation?.manageUrl).toBe('https://www.autoscout24.fr/account/searches');
+  });
+
+  it('la confirmation AutoScout24 lue dans son HTML : le nom donné à la recherche, « Profil de recherche 14/10/2026 », est retrouvé dans le texte visible', () => {
+    // Given
+    const html = loadFixture('emails/autoscout24/confirmation-de-recherche-sauvegardee.html');
+
+    // When
+    const confirmation = confirmationOf({
+      from: 'savedsearches@notifications.autoscout24.com',
+      subject: 'Profil de recherche 14/10/2026 : ta recherche a bien été enregistrée',
+      html,
+    });
+
+    // Then
+    expect(confirmation?.criteria).toBe('Recherche « Profil de recherche 14/10/2026 » enregistrée');
   });
 
   it("une confirmation d'inscription La Centrale, ParuVendu ou AutoScout24, ou une alerte de sécurité Google, n'est pas une confirmation d'alerte", () => {
@@ -74,9 +100,21 @@ describe('emails de confirmation d’alerte des sites', () => {
     const securityAlert = { from: 'no-reply@accounts.google.com', subject: 'Alerte de sécurité', html: '<p>alerte</p>' };
 
     // When
-    const confirmations = [accountCreated, accountToConfirm, addressToConfirm, securityAlert].map(detectAlertConfirmation);
+    const confirmations = [accountCreated, accountToConfirm, addressToConfirm, securityAlert].map(confirmationOf);
 
     // Then
     expect(confirmations).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
+  it('le vrai email La Centrale « 61 nouveaux véhicules » : son texte visible ne garde aucun des caractères invisibles qui remplissent l’aperçu', () => {
+    // Given
+    const html = loadFixture('emails/lacentrale/61-nouvelles-annonces-dont-3-en-apercu.html');
+
+    // When
+    const { text } = extractor.visibleContent({ html });
+
+    // Then
+    expect(text).toMatch(/^Découvrez les résultats de votre recherche Vos nouvelles alertes/);
+    expect(text).not.toMatch(/[\u200B-\u200F\u00AD]|\u034F/);
   });
 });

@@ -662,13 +662,13 @@ export function vehicleRepositoryContract(create: () => VehicleRepository): void
       expect(page.nextCursor).toBeUndefined();
     });
 
-    it('la page suivante reprend après la dernière annonce vue même si deux annonces ont la même date', () => {
+    it('la Mustang GT et la Corvette C7 du même email Leboncoin, mises en ligne à l’heure de l’email, restent dans l’ordre de l’email, et la page suivante reprend après la dernière annonce vue', () => {
       // Given
       const repository = create();
       const sameEmail = '2026-10-13T06:58:03.000Z';
       const porsche = storeFirstSighting(repository, PORSCHE_911_4S, '2026-10-12T07:00:00.000Z');
-      const alpine = storeFirstSighting(repository, { ...ALPINE_A110, publishedAt: sameEmail }, '2026-10-13T07:00:00.000Z');
-      const corvette = storeFirstSighting(repository, { ...CORVETTE_C7, publishedAt: sameEmail }, '2026-10-13T07:00:01.000Z');
+      const mustang = storeFirstSighting(repository, { ...MUSTANG_GT, publishedAt: sameEmail }, '2026-10-13T07:00:00.000Z');
+      const corvette = storeFirstSighting(repository, { ...CORVETTE_C7, publishedAt: sameEmail }, '2026-10-13T07:00:00.000Z');
 
       // When
       const first = repository.page({ selection: NOUVEAU, limit: 1 });
@@ -677,10 +677,10 @@ export function vehicleRepositoryContract(create: () => VehicleRepository): void
 
       // Then
       expect([...first.vehicles, ...second.vehicles, ...third.vehicles].map((vehicle) => vehicle.id)).toEqual(
-        ids([corvette, alpine, porsche]),
+        ids([mustang, corvette, porsche]),
       );
-      expect(first.nextCursor).toEqual({ sortAt: sameEmail, id: corvette.vehicleId });
-      expect(second.nextCursor).toEqual({ sortAt: sameEmail, id: alpine.vehicleId });
+      expect(first.nextCursor).toEqual({ sortAt: sameEmail, id: mustang.vehicleId });
+      expect(second.nextCursor).toEqual({ sortAt: sameEmail, id: corvette.vehicleId });
       expect(third.nextCursor).toBeUndefined();
     });
 

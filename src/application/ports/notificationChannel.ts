@@ -33,3 +33,8 @@ export interface NotificationChannel {
   push(subscription: PushSubscription, notification: PushNotification): Promise<PushOutcome>;
   telegram(chat: TelegramChat, text: string): Promise<TelegramOutcome>;
 }
+
+export const deliveryFailed = (error: unknown): DeliveryFailed => ({
+  kind: 'failed',
+  error: error instanceof Error ? error : new Error(String(error)),
+});

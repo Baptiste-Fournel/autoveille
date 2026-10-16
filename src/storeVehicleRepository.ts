@@ -218,14 +218,14 @@ const compareText = (a: string, b: string): number => {
 
 const sortAtOf = (vehicle: Vehicle): string => vehicle.publishedAt ?? vehicle.firstSeenAt;
 
-const mostRecentlySortedFirst = (a: Vehicle, b: Vehicle): number => compareText(sortAtOf(b), sortAtOf(a)) || b.id - a.id;
+const newestFirstInArrivalOrder = (a: Vehicle, b: Vehicle): number => compareText(sortAtOf(b), sortAtOf(a)) || a.id - b.id;
 
 const comesAfter = (vehicle: Vehicle, cursor: VehicleCursor | undefined): boolean => {
   if (cursor === undefined) {
     return true;
   }
   const sortAt = sortAtOf(vehicle);
-  return sortAt < cursor.sortAt || (sortAt === cursor.sortAt && vehicle.id < cursor.id);
+  return sortAt < cursor.sortAt || (sortAt === cursor.sortAt && vehicle.id > cursor.id);
 };
 
 const groupsOf = (vehicle: Vehicle): readonly RejectionGroup[] => vehicle.rejections.map(rejectionGroupOf);
@@ -285,7 +285,7 @@ export const storeVehicleRepository = (store: Store): VehicleRepository => {
             (query.firstSeenSince === undefined || candidate.firstSeenAt >= query.firstSeenSince) &&
             comesAfter(candidate, query.after),
         )
-        .sort(mostRecentlySortedFirst);
+        .sort(newestFirstInArrivalOrder);
       const vehicles = matching.slice(0, query.limit);
       const last = vehicles.at(-1);
       return matching.length > vehicles.length && last !== undefined
