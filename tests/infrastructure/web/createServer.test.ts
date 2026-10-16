@@ -36,7 +36,7 @@ async function rawHttpRequest(port: number, requestLine: string): Promise<string
 }
 
 describe('en-têtes de sécurité', () => {
-  it('la page de l’application n’autorise que ses propres scripts et styles, et les photos des annonces en https', async () => {
+  it('la page de l’application n’autorise que ses propres scripts, styles et polices, et les photos des annonces en https', async () => {
     // Given
     const application = await runningApplication();
 
@@ -59,25 +59,10 @@ describe('en-têtes de sécurité', () => {
       ]),
     );
     expect(policy.find((directive) => directive.startsWith('script-src'))).toBe("script-src 'self'");
-    expect(policy.find((directive) => directive.startsWith('style-src'))).toMatch(/^style-src 'self'/);
+    expect(policy.find((directive) => directive.startsWith('style-src'))).toBe("style-src 'self'");
+    expect(policy.find((directive) => directive.startsWith('font-src'))).toBe("font-src 'self'");
     expect(policy.join(';')).not.toContain('unsafe-inline');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
-  });
-
-  it('le thème clair ou sombre choisi sur le téléphone est appliqué avant l’affichage par un script servi par l’application, la page n’ayant plus de script en ligne', async () => {
-    // Given
-    const application = await runningApplication();
-
-    // When
-    const page = await application.server.inject({ method: 'GET', url: '/' });
-    const themeScript = await application.server.inject({ method: 'GET', url: '/theme.js' });
-
-    // Then
-    const scripts = page.body.match(/<script[^>]*>/g) ?? [];
-    expect(scripts).toEqual(['<script src="/theme.js">', '<script src="/app.js" defer>']);
-    expect(themeScript.statusCode).toBe(200);
-    expect(themeScript.headers['content-type']).toMatch(/^text\/javascript|^application\/javascript/);
-    expect(themeScript.body).toContain("localStorage.getItem('av_theme')");
   });
 
   it('une réponse de l’API refusée faute de session porte aussi les en-têtes de sécurité', async () => {
@@ -126,6 +111,25 @@ describe('mise en cache des fichiers de l’application', () => {
     // Then
     expect(script.headers['cache-control']).toBe('public, max-age=31536000, immutable');
     expect(page.headers['cache-control']).toBe('no-cache');
+  });
+
+  it('le service worker est revalidé à chaque visite, pour qu’un téléphone reçoive la nouvelle version de l’application dès sa mise à jour', async () => {
+    // Given
+    const builtClient = mkdtempSync(join(tmpdir(), 'autoveille-client-'));
+    onTestFinished(() => rmSync(builtClient, { recursive: true, force: true }));
+    writeFileSync(join(builtClient, 'index.html'), '<!doctype html><title>AutoVeille</title>');
+    writeFileSync(join(builtClient, 'sw.js'), 'self.addEventListener("push", () => undefined);');
+    writeFileSync(join(builtClient, 'manifest.webmanifest'), '{"name":"AutoVeille"}');
+    const application = await runningApplication({ staticDirectory: builtClient });
+
+    // When
+    const worker = await application.server.inject({ method: 'GET', url: '/sw.js' });
+    const manifest = await application.server.inject({ method: 'GET', url: '/manifest.webmanifest' });
+
+    // Then
+    expect(worker.statusCode).toBe(200);
+    expect(worker.headers['cache-control']).toBe('no-cache');
+    expect(manifest.headers['cache-control']).toBe('no-cache');
   });
 });
 

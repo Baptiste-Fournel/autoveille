@@ -578,3 +578,42 @@ describe('étiquette de la liste (ETag)', () => {
     expect(pageOf(after).vehicles.map((vehicle) => vehicle.name)).toEqual(['Porsche 911 Carrera 4S']);
   });
 });
+
+describe('étiquette de la fiche (ETag)', () => {
+  it('la fiche de la Porsche ouverte sur le téléphone, redemandée à la minute suivante sans changement, répond 304 sans renvoyer l’annonce', async () => {
+    // Given
+    const { application, session } = await signedInApplication();
+    const porsche = await received(application, PORSCHE_911_4S);
+    const first = await get(application, `/api/vehicles/${porsche}`, session);
+
+    // When
+    const again = await get(application, `/api/vehicles/${porsche}`, { ...session, 'if-none-match': String(first.headers.etag) });
+
+    // Then
+    expect(first.statusCode).toBe(200);
+    expect(first.headers.etag).toEqual(expect.any(String));
+    expect(again.statusCode).toBe(304);
+    expect(again.body).toBe('');
+  });
+
+  it('après une note enregistrée depuis l’ordinateur de la concession, la fiche de la Porsche a changé et revient en entier', async () => {
+    // Given
+    const { application, session } = await signedInApplication();
+    const porsche = await received(application, PORSCHE_911_4S);
+    const before = await get(application, `/api/vehicles/${porsche}`, session);
+    await application.server.inject({
+      method: 'POST',
+      url: `/api/vehicles/${porsche}`,
+      payload: { note: 'Rappeler samedi matin' },
+      headers: session,
+    });
+
+    // When
+    const after = await get(application, `/api/vehicles/${porsche}`, { ...session, 'if-none-match': String(before.headers.etag) });
+
+    // Then
+    expect(after.statusCode).toBe(200);
+    expect(after.headers.etag).not.toBe(before.headers.etag);
+    expect(after.json<{ readonly note: string }>().note).toBe('Rappeler samedi matin');
+  });
+});

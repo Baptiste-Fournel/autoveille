@@ -6,6 +6,8 @@ export type EntryPoint = 'entryPoint' | 'module';
 
 const statefulCollections = ['Map', 'Set', 'WeakMap', 'WeakSet'];
 
+const reactiveStateFactories = ['signal', 'computed', 'effect'];
+
 const functionTypes = ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'];
 
 const declarationStatements = [
@@ -26,7 +28,15 @@ const declarationStatements = [
   'EmptyStatement',
 ];
 
-const builtInsideAFunction = 'à construire dans une fonction (la fonction main de main.ts comprise)';
+const isClientFile = (file: SourceFile): boolean => file.path.startsWith('client/');
+
+const builtInsideAFunction = (file: SourceFile): string =>
+  isClientFile(file)
+    ? "à construire dans une fonction (createAppState pour l'état de l'application)"
+    : 'à construire dans une fonction (la fonction main de main.ts comprise)';
+
+const entryPointsOf = (file: SourceFile): string =>
+  isClientFile(file) ? 'seuls client/src/main.tsx, beforeFirstPaint.ts et sw.ts en ont' : 'seuls src/main.ts et src/cli/ en ont';
 
 const moduleVariableDeclarations = (program: AstNode): readonly AstNode[] =>
   nodesAt(program, 'body').flatMap((statement) => {
@@ -38,6 +48,12 @@ const collectionCreatedBy = (expression: AstNode | undefined): string | undefine
   const init = withoutWrappers(expression);
   const constructorName = init?.type === 'NewExpression' ? stringAt(nodeAt(init, 'callee'), 'name') : undefined;
   return constructorName !== undefined && statefulCollections.includes(constructorName) ? constructorName : undefined;
+};
+
+const reactiveStateCreatedBy = (expression: AstNode | undefined): string | undefined => {
+  const init = withoutWrappers(expression);
+  const factory = init?.type === 'CallExpression' ? stringAt(withoutWrappers(nodeAt(init, 'callee')), 'name') : undefined;
+  return factory !== undefined && reactiveStateFactories.includes(factory) ? factory : undefined;
 };
 
 const isImmediatelyInvoked = (expression: AstNode | undefined): boolean => {
@@ -59,7 +75,7 @@ const declaratorViolations = (file: SourceFile, kind: string, declarator: AstNod
         'globalState',
         file,
         declarator.start,
-        `« ${kind} ${name} » au niveau module : état global, à passer en paramètre ou ${builtInsideAFunction}`,
+        `« ${kind} ${name} » au niveau module : état global, à passer en paramètre ou ${builtInsideAFunction(file)}`,
       ),
     ];
   }
@@ -71,7 +87,18 @@ const declaratorViolations = (file: SourceFile, kind: string, declarator: AstNod
         'globalState',
         file,
         declarator.start,
-        `« const ${name} = new ${collection}(…) » au niveau module : état global (cache compris), ${builtInsideAFunction}`,
+        `« const ${name} = new ${collection}(…) » au niveau module : état global (cache compris), ${builtInsideAFunction(file)}`,
+      ),
+    ];
+  }
+  const reactiveState = isClientFile(file) ? reactiveStateCreatedBy(init) : undefined;
+  if (reactiveState !== undefined) {
+    return [
+      violationAt(
+        'globalState',
+        file,
+        declarator.start,
+        `« const ${name} = ${reactiveState}(…) » au niveau module : état partagé par toutes les applications montées, ${builtInsideAFunction(file)}`,
       ),
     ];
   }
@@ -81,7 +108,7 @@ const declaratorViolations = (file: SourceFile, kind: string, declarator: AstNod
           'globalState',
           file,
           declarator.start,
-          `« const ${name} = (() => …)() » au niveau module : la fermeture exécutée au chargement garde un état global, ${builtInsideAFunction}`,
+          `« const ${name} = (() => …)() » au niveau module : la fermeture exécutée au chargement garde un état global, ${builtInsideAFunction(file)}`,
         ),
       ]
     : [];
@@ -106,7 +133,7 @@ const defaultExportViolations = (file: SourceFile, program: AstNode): readonly V
               'globalState',
               file,
               statement.start,
-              `« export default new ${collection}(…) » : état global partagé par tous les importeurs, ${builtInsideAFunction}`,
+              `« export default new ${collection}(…) » : état global partagé par tous les importeurs, ${builtInsideAFunction(file)}`,
             ),
           ];
     });
@@ -123,7 +150,7 @@ const staticFieldViolations = (file: SourceFile, program: AstNode): readonly Vio
             'globalState',
             file,
             field.start,
-            `champ « static ${name} = new ${collection}(…) » : état global porté par la classe, ${builtInsideAFunction}`,
+            `champ « static ${name} = new ${collection}(…) » : état global porté par la classe, ${builtInsideAFunction(file)}`,
           ),
         ];
       }
@@ -151,7 +178,7 @@ const loadTimeStatementViolations = (file: SourceFile, program: AstNode): readon
         'globalState',
         file,
         statement.start,
-        `instruction « ${excerpt(sourceOf(file.text, statement).split('\n')[0] ?? '')} » exécutée au chargement du module : effet de bord global, seuls src/main.ts et src/cli/ en ont`,
+        `instruction « ${excerpt(sourceOf(file.text, statement).split('\n')[0] ?? '')} » exécutée au chargement du module : effet de bord global, ${entryPointsOf(file)}`,
       ),
     );
 

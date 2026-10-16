@@ -44,7 +44,7 @@ import type { ApplicationPorts, PollingSources } from './infrastructure/web/webD
 
 const DATABASE_FILE = 'autoveille.sqlite';
 
-const PUBLIC_DIRECTORY = 'public';
+const CLIENT_DIRECTORY = join('dist', 'client');
 
 const SESSION_CLEANUP_INTERVAL_MS = 86_400_000;
 
@@ -163,7 +163,7 @@ export const systemEnvironment = (config: Config, logging: boolean): Application
   ...systemRuntime(),
   config,
   databaseFile: join(config.dataDir, DATABASE_FILE),
-  staticDirectory: resolve(PUBLIC_DIRECTORY),
+  staticDirectory: resolve(CLIENT_DIRECTORY),
   imapClient: imapFlowClient,
   webPush: webpush,
   logging,

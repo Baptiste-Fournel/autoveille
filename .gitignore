@@ -4,3 +4,4 @@ data/
 .env
 *.sqlite*
 !*.sqlite.test.ts
+test-results/

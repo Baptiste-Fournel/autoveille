@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url';
 import { vi } from 'vitest';
 import { ingestListing } from '../../src/application/ingest/ingestListing.js';
 import type { EmailListingSummary } from '../../src/application/ports/mailboxStateRepository.js';
@@ -12,6 +11,7 @@ import type { WebPushClient } from '../../src/infrastructure/push/webPushChannel
 import { type Application, buildApplication } from '../../src/main.js';
 import { OWNER_PASSWORD, SESSION_COOKIE } from '../support/authentication.js';
 import { manualTimers } from '../support/manualTimers.js';
+import { servedClient } from '../support/servedClient.js';
 import { type SteppingClock, steppingClock } from '../support/steppingClock.js';
 import { A_WEEK_BEFORE, ONE_WEEK } from './clock.js';
 
@@ -48,8 +48,6 @@ export interface ContractApp {
 export interface ContractAppOptions {
   readonly setupCode?: string;
 }
-
-const PUBLIC_DIRECTORY = fileURLToPath(new URL('../../public/', import.meta.url));
 
 const CONTACTED_LAST_WEEK: RawListing = {
   site: 'leboncoin',
@@ -387,10 +385,11 @@ function headerText(value: string | number | readonly string[] | undefined): str
 export async function startContractApp(options: ContractAppOptions = {}): Promise<ContractApp> {
   vi.stubEnv('TZ', 'Europe/Paris');
   const clock = steppingClock(A_WEEK_BEFORE);
+  const client = servedClient();
   const application = await buildApplication({
     config: loadConfig({ environment: { SETUP_CODE: options.setupCode ?? '' }, dotEnv: '', workingDirectory: '/srv/autoveille' }),
     databaseFile: ':memory:',
-    staticDirectory: PUBLIC_DIRECTORY,
+    staticDirectory: client.directory,
     clock,
     fetch: noNetwork,
     imapClient: imapFlowClient,
@@ -434,6 +433,7 @@ export async function startContractApp(options: ContractAppOptions = {}): Promis
 
   const stop = async (): Promise<void> => {
     await application.stop();
+    client.remove();
     vi.unstubAllEnvs();
   };
 

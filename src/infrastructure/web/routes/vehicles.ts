@@ -24,13 +24,15 @@ export const vehicleListRoutes: RouteModule = (server, { ports }) => {
   );
 };
 
-export const vehicleRoutes: RouteModule = (server, { ports }) => {
+export const vehicleSheetRoutes: RouteModule = (server, { ports }) => {
   server.get<{ Params: VehicleAddress }>(
     '/api/vehicles/:id',
     { schema: vehicleAddressSchema, schemaErrorFormatter: unknownVehicleUnlessNumbered },
     async (request): Promise<VehicleDto> => vehicleSheetDto(getVehicle(ports, request.params.id)),
   );
+};
 
+export const vehicleRoutes: RouteModule = (server, { ports }) => {
   server.post<{ Params: VehicleAddress; Body: VehicleUpdateRequest }>(
     '/api/vehicles/:id',
     { schema: vehicleUpdateSchema, schemaErrorFormatter: unknownVehicleUnlessNumbered },

@@ -7,6 +7,7 @@
       "!!**/node_modules",
       "!!**/data",
       "!!**/coverage",
+      "!!**/test-results",
       "!package-lock.json",
       "!tests/fixtures/**/*.html",
       "!tests/fixtures/**/*.eml",
@@ -52,33 +53,24 @@
   },
   "overrides": [
     {
-      "includes": ["public/app.js", "public/sw.js", "public/index.html", "public/styles.css", "public/icons/icon.svg"],
-      "formatter": {
-        "enabled": false
-      },
-      "assist": {
-        "enabled": false
-      },
+      "includes": ["client/src/styles.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          },
+          "style": {
+            "noDescendingSpecificity": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["public/icons/icon.svg"],
       "linter": {
         "rules": {
           "a11y": {
             "noSvgWithoutTitle": "off"
-          },
-          "complexity": {
-            "noImportantStyles": "off",
-            "useOptionalChain": "off"
-          },
-          "correctness": {
-            "noUnusedVariables": "off"
-          },
-          "style": {
-            "noDescendingSpecificity": "off",
-            "useConst": "off",
-            "useTemplate": "off"
-          },
-          "suspicious": {
-            "noAssignInExpressions": "off",
-            "useIterableCallbackReturn": "off"
           }
         }
       }

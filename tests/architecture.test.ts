@@ -1,10 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { reviewBiomeLegacyOverride } from './support/architecture/biomeLegacyOverride.js';
-import { reviewExceptions } from './support/architecture/exceptions.js';
+import { reviewBiomeOverrides } from './support/architecture/biomeOverrides.js';
 import { findViolations } from './support/architecture/findViolations.js';
-import { legacyExceptions } from './support/architecture/legacy.js';
-import { existsInRepository, readBiomeLegacyOverride, readSourceTree } from './support/architecture/sourceTree.js';
+import { existsInRepository, readBiomeOverrides, readSourceTree } from './support/architecture/sourceTree.js';
 import type { SourceFile } from './support/architecture/violation.js';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -556,6 +554,96 @@ describe('état global au chargement des modules', () => {
   });
 });
 
+describe('état global du client', () => {
+  it("l'annonce qui attend « Message envoyé ? », gardée dans un let de module comme dans l'ancien écran, est refusée", () => {
+    // Given
+    const confirmation = file('client/src/state/pendingConfirmation.ts', 'export let pendingConfirmation: number | null = null;');
+
+    // When
+    const messages = messagesOf(confirmation);
+
+    // Then
+    expect(messages).toEqual([
+      "client/src/state/pendingConfirmation.ts:1 « let pendingConfirmation » au niveau module : état global, à passer en paramètre ou à construire dans une fonction (createAppState pour l'état de l'application)",
+    ]);
+  });
+
+  it('les ETag des listes gardés dans une Map de module seraient partagés par deux applications montées', () => {
+    // Given
+    const lists = file('client/src/state/vehicleLists.ts', 'const validators = new Map<string, string>();');
+
+    // When
+    const broken = brokenRules(lists);
+
+    // Then
+    expect(broken).toEqual(['globalState client/src/state/vehicleLists.ts:1']);
+  });
+
+  it('la question « Message envoyé ? » gardée dans un signal de module serait partagée par deux applications montées', () => {
+    // Given
+    const confirmation = file(
+      'client/src/state/pendingConfirmation.ts',
+      "import { signal } from '@preact/signals';",
+      'export const pendingConfirmation = signal<number | null>(null);',
+    );
+
+    // When
+    const messages = messagesOf(confirmation);
+
+    // Then
+    expect(messages).toEqual([
+      "client/src/state/pendingConfirmation.ts:2 « const pendingConfirmation = signal(…) » au niveau module : état partagé par toutes les applications montées, à construire dans une fonction (createAppState pour l'état de l'application)",
+    ]);
+  });
+
+  it('un effet de @preact/signals qui suivrait la route dès le chargement de son module, pour toutes les applications à la fois, est refusé', () => {
+    // Given
+    const entering = file(
+      'client/src/app/entering.ts',
+      "import { effect } from '@preact/signals';",
+      "import { route } from './route';",
+      'export const stopEntering = effect(() => enter(route.value));',
+    );
+
+    // When
+    const broken = brokenRules(entering);
+
+    // Then
+    expect(broken).toEqual(['globalState client/src/app/entering.ts:3']);
+  });
+
+  it("un routeur qui s'abonne à hashchange dès le chargement de son module, comme l'ancien écran, est refusé", () => {
+    // Given
+    const router = file('client/src/app/router.ts', "window.addEventListener('hashchange', () => render());");
+
+    // When
+    const messages = messagesOf(router);
+
+    // Then
+    expect(messages).toEqual([
+      "client/src/app/router.ts:1 instruction « window.addEventListener('hashchange', () => render()); » exécutée au chargement du module : effet de bord global, seuls client/src/main.tsx, beforeFirstPaint.ts et sw.ts en ont",
+    ]);
+  });
+
+  it("la page monte l'application et le service worker s'abonne aux notifications au chargement, comme main.ts démarre le serveur", () => {
+    // Given
+    const main = file(
+      'client/src/main.tsx',
+      "const root = document.getElementById('app');",
+      'if (root !== null) {',
+      '  void startApplication({ fetch: (input, init) => window.fetch(input, init), window }, root);',
+      '}',
+    );
+    const serviceWorker = file('client/src/sw.ts', 'precacheAndRoute(self.__WB_MANIFEST);', "self.addEventListener('push', onPush);");
+
+    // When
+    const broken = brokenRules(main, serviceWorker);
+
+    // Then
+    expect(broken).toEqual([]);
+  });
+});
+
 describe('domaine et application purs', () => {
   it("l'année maximale calculée avec new Date() dans le domaine est refusée", () => {
     // Given
@@ -794,6 +882,51 @@ describe('commentaires', () => {
     expect(broken).toEqual(['comment public/app.js:1']);
   });
 
+  it("un titre de section repris de l'ancienne feuille de style est refusé dans celle du client", () => {
+    // Given
+    const styles = file('client/src/styles.css', '/* ---------- toast ---------- */', '#toast { position: fixed; }');
+
+    // When
+    const messages = messagesOf(styles);
+
+    // Then
+    expect(messages).toEqual([
+      'client/src/styles.css:1 commentaire interdit « /* ---------- toast ---------- */ » : aucun commentaire dans les feuilles de style et les pages servies (une intention de mise en page devient une entrée de docs/decisions.md)',
+    ]);
+  });
+
+  it("une adresse ou un texte de la feuille de style du client qui contient /* n'est pas un commentaire", () => {
+    // Given
+    const styles = file(
+      'client/src/styles.css',
+      ".photo.none::after { content: '/* photo sur le site */'; }",
+      '.chip { background: url("/icons/icon.svg#/*"); }',
+    );
+
+    // When
+    const broken = brokenRules(styles);
+
+    // Then
+    expect(broken).toEqual([]);
+  });
+
+  it('un commentaire HTML dans la page du client est refusé', () => {
+    // Given
+    const page = file(
+      'client/index.html',
+      '<head>',
+      '  <!-- thème appliqué avant l’affichage -->',
+      '  <script type="module" src="/src/beforeFirstPaint.ts"></script>',
+      '</head>',
+    );
+
+    // When
+    const broken = brokenRules(page);
+
+    // Then
+    expect(broken).toEqual(['comment client/index.html:2']);
+  });
+
   it('les marqueurs Given, When et Then dans un test sont permis', () => {
     // Given
     const priceTest = file(
@@ -844,6 +977,25 @@ describe('assertions de type', () => {
     // Then
     expect(messages).toEqual([
       'tests/application/ingest/ingestListing.test.ts:1 assertion « as unknown as VehicleRepository » : « as unknown as » et « as never » sont interdits partout',
+    ]);
+  });
+
+  it('un double de service worker converti en deux instructions, as unknown puis as ServiceWorkerContainer, est refusé comme as unknown as', () => {
+    // Given
+    const appTest = file(
+      'tests/client/App.test.tsx',
+      'const refusingServiceWorker = (): ServiceWorkerContainer => {',
+      '  const container = { register: () => Promise.reject(new Error("insecure")) } as unknown;',
+      '  return container as ServiceWorkerContainer;',
+      '};',
+    );
+
+    // When
+    const messages = messagesOf(appTest);
+
+    // Then
+    expect(messages).toEqual([
+      "tests/client/App.test.tsx:2 assertion « as unknown » : « as unknown » seul est interdit partout, car suivi d'un « as » dans une autre instruction il revient à « as unknown as »",
     ]);
   });
 
@@ -1004,232 +1156,89 @@ describe('placement des fichiers', () => {
   });
 });
 
-describe('exceptions transitoires du code hérité', () => {
-  it('un fichier hérité exempté de commentaires reste soumis à la règle de composition', () => {
+describe('overrides Biome', () => {
+  it('un override Biome qui relâche src/*.ts et src/cli/** engloberait main.ts et la CLI', () => {
     // Given
-    const pipeline = file(
-      'src/pipeline.ts',
-      '// Republication sur le même site : même véhicule, statut conservé.',
-      "import { createVehicleRepository } from './infrastructure/persistence/sqlite/vehicleRepository.js';",
-    );
+    const overrides = [{ includes: ['src/*.ts', 'src/cli/**'], disablesFormatter: false }];
 
     // When
-    const review = reviewExceptions(
-      findViolations([pipeline]),
-      [{ path: 'src/pipeline.ts', rules: ['placement', 'comment'] }],
-      ['src/pipeline.ts'],
-    );
-
-    // Then
-    expect(review.violations.map((violation) => violation.message)).toEqual([
-      "src/pipeline.ts:2 importe l'adaptateur « ./infrastructure/persistence/sqlite/vehicleRepository.js » (src/infrastructure/persistence/sqlite/vehicleRepository.js) : seuls src/main.ts et src/cli/ importent src/infrastructure/",
-    ]);
-    expect(review.staleExceptions).toEqual([]);
-  });
-
-  it('une exception qui vise un fichier supprimé fait échouer le test', () => {
-    // Given
-    const exceptions = [{ path: 'src/geo/geo.ts', rules: ['placement', 'globalState'] }] as const;
-
-    // When
-    const review = reviewExceptions([], exceptions, ['src/domain/geo/distance.ts']);
-
-    // Then
-    expect(review.staleExceptions).toEqual(["src/geo/geo.ts n'existe plus : retirer son entrée de tests/support/architecture/legacy.ts"]);
-  });
-
-  it('une exception devenue inutile après le nettoyage du fichier fait échouer le test', () => {
-    // Given
-    const filters = file('src/listings/filters.ts', "export { evaluate } from '../domain/filtering/evaluate.js';");
-
-    // When
-    const review = reviewExceptions(
-      findViolations([filters]),
-      [{ path: 'src/listings/filters.ts', rules: ['placement', 'comment'] }],
-      ['src/listings/filters.ts'],
-    );
-
-    // Then
-    expect(review.violations).toEqual([]);
-    expect(review.staleExceptions).toEqual([
-      'src/listings/filters.ts respecte désormais la règle « comment » : la retirer de son entrée dans tests/support/architecture/legacy.ts',
-    ]);
-  });
-
-  it('une entrée héritée dont on a retiré la dernière règle doit quitter la liste', () => {
-    // Given
-    const filters = file('src/listings/filters.ts', "export { evaluate } from '../domain/filtering/evaluate.js';");
-
-    // When
-    const review = reviewExceptions(
-      findViolations([filters]),
-      [{ path: 'src/listings/filters.ts', rules: [] }],
-      ['src/listings/filters.ts'],
-    );
-
-    // Then
-    expect(review.staleExceptions).toEqual([
-      "src/listings/filters.ts n'a plus aucune règle exemptée : retirer son entrée de tests/support/architecture/legacy.ts",
-    ]);
-  });
-});
-
-describe('liste des exceptions et override Biome du code hérité', () => {
-  it('une exception accordée à un fichier du domaine est refusée', () => {
-    // Given
-    const exceptions = [{ path: 'src/domain/catalog/brands.ts', rules: ['globalState'] }] as const;
-
-    // When
-    const review = reviewExceptions([], exceptions, ['src/domain/catalog/brands.ts']);
-
-    // Then
-    expect(review.invalidExceptions).toEqual([
-      "src/domain/catalog/brands.ts est un emplacement de la nouvelle architecture : aucune exception n'y est permise dans tests/support/architecture/legacy.ts, corriger le fichier",
-    ]);
-  });
-
-  it('une exception accordée à la commande de démo réécrite sur la composition est refusée', () => {
-    // Given
-    const exceptions = [{ path: 'src/cli/demo.ts', rules: ['comment'] }] as const;
-
-    // When
-    const review = reviewExceptions([], exceptions, ['src/cli/demo.ts']);
-
-    // Then
-    expect(review.invalidExceptions).toEqual([
-      "src/cli/demo.ts est un emplacement de la nouvelle architecture : aucune exception n'y est permise dans tests/support/architecture/legacy.ts, corriger le fichier",
-    ]);
-  });
-
-  it('une exception accordée à un utils.ts posé à la racine de src/ est refusée', () => {
-    // Given
-    const exceptions = [{ path: 'src/utils.ts', rules: ['placement'] }] as const;
-
-    // When
-    const review = reviewExceptions([], exceptions, ['src/utils.ts']);
-
-    // Then
-    expect(review.invalidExceptions).toEqual([
-      "src/utils.ts est un emplacement de la nouvelle architecture : aucune exception n'y est permise dans tests/support/architecture/legacy.ts, corriger le fichier",
-    ]);
-  });
-
-  it('deux entrées pour le même fichier hérité sont signalées', () => {
-    // Given
-    const exceptions = [
-      { path: 'public/app.js', rules: ['comment'] },
-      { path: 'public/app.js', rules: ['globalState'] },
-    ] as const;
-
-    // When
-    const review = reviewExceptions([], exceptions, ['public/app.js']);
-
-    // Then
-    expect(review.invalidExceptions).toEqual([
-      "public/app.js a plusieurs entrées dans tests/support/architecture/legacy.ts : n'en garder qu'une",
-    ]);
-  });
-
-  it('un override Biome qui relâche src/*.ts et src/cli/** engloberait le futur main.ts et la CLI réécrite', () => {
-    // Given
-    const includes = ['src/*.ts', 'src/cli/**', 'public/icons/**'];
-
-    // When
-    const problems = reviewBiomeLegacyOverride(includes, [], () => true);
+    const problems = reviewBiomeOverrides(overrides, () => true);
 
     // Then
     expect(problems).toEqual([
-      '« src/*.ts » est un motif qui engloberait du code neuf (src/main.ts, src/cli/…) : nommer les fichiers hérités un par un',
-      '« src/cli/** » couvre un emplacement de la nouvelle architecture : nommer les fichiers hérités un par un',
+      '« src/*.ts » est un motif qui engloberait du code neuf (src/main.ts, src/cli/…) : nommer les fichiers un par un',
+      '« src/cli/** » est un motif qui engloberait du code neuf (src/main.ts, src/cli/…) : nommer les fichiers un par un',
     ]);
   });
 
   it("un override Biome qui relâcherait encore l'ancien dossier src/listings/ couvrirait du code neuf", () => {
     // Given
-    const includes = ['src/listings/**'];
+    const overrides = [{ includes: ['src/listings/**'], disablesFormatter: false }];
 
     // When
-    const problems = reviewBiomeLegacyOverride(includes, [], () => true);
+    const problems = reviewBiomeOverrides(overrides, () => true);
 
     // Then
     expect(problems).toEqual([
-      '« src/listings/** » couvre un emplacement de la nouvelle architecture : nommer les fichiers hérités un par un',
+      '« src/listings/** » est un motif qui engloberait du code neuf (src/main.ts, src/cli/…) : nommer les fichiers un par un',
     ]);
   });
 
-  it("la CLI de démo réécrite, sortie de legacy.ts, doit aussi sortir de l'override Biome", () => {
+  it('un override Biome qui nomme la commande de démo réécrite la soustrairait aux règles du code', () => {
     // Given
-    const includes = ['src/cli/demo.ts', 'src/cli/parse-email.ts'];
+    const overrides = [{ includes: ['src/cli/demo.ts'], disablesFormatter: false }];
 
     // When
-    const problems = reviewBiomeLegacyOverride(includes, ['src/cli/parse-email.ts'], () => true);
+    const problems = reviewBiomeOverrides(overrides, () => true);
 
     // Then
-    expect(problems).toEqual([
-      "« src/cli/demo.ts » n'a plus d'exception dans tests/support/architecture/legacy.ts : le retirer de l'override pour qu'il soit formaté et vérifié",
-    ]);
+    expect(problems).toEqual(["« src/cli/demo.ts » est du code : une règle de Biome s'y respecte, elle ne s'y relâche pas"]);
+  });
+
+  it("l'override de l'ancien écran, qui coupait le formateur sur public/, est refusé : tout fichier est formaté", () => {
+    // Given
+    const overrides = [{ includes: ['public/icons/icon.svg'], disablesFormatter: true }];
+
+    // When
+    const problems = reviewBiomeOverrides(overrides, () => true);
+
+    // Then
+    expect(problems).toEqual(["l'override de public/icons/icon.svg coupe le formateur : tout fichier du dépôt est formaté"]);
+  });
+
+  it("un override Biome qui vise encore la feuille de style de l'ancien écran, supprimée, est signalé", () => {
+    // Given
+    const overrides = [{ includes: ['public/styles.css'], disablesFormatter: false }];
+
+    // When
+    const problems = reviewBiomeOverrides(overrides, (path) => path !== 'public/styles.css');
+
+    // Then
+    expect(problems).toEqual(["« public/styles.css » n'existe plus : le retirer de l'override"]);
   });
 });
 
 describe('arborescence réelle du dépôt', () => {
-  it('src/, client/, public/ et tests/ respectent les règles, exceptions transitoires comprises', () => {
+  it('src/, client/, public/ et tests/ respectent les règles, sans aucune exception', () => {
     // Given
     const files = readSourceTree(repositoryRoot);
 
     // When
-    const review = reviewExceptions(
-      findViolations(files),
-      legacyExceptions,
-      files.map((source) => source.path),
-    );
+    const violations = findViolations(files);
 
     // Then
-    expect(review.violations.map((violation) => violation.message)).toEqual([]);
+    expect(violations.map((violation) => violation.message)).toEqual([]);
   });
 
-  it('chaque exception transitoire vise encore un fichier qui enfreint encore la règle exemptée', () => {
+  it("biome.json ne relâche des règles que pour la feuille de style reprise de l'ancien écran et l'icône, jamais pour du code, sans couper le formateur", () => {
     // Given
-    const files = readSourceTree(repositoryRoot);
+    const overrides = readBiomeOverrides(repositoryRoot);
 
     // When
-    const review = reviewExceptions(
-      findViolations(files),
-      legacyExceptions,
-      files.map((source) => source.path),
-    );
+    const problems = reviewBiomeOverrides(overrides, existsInRepository(repositoryRoot));
 
     // Then
-    expect(review.staleExceptions).toEqual([]);
-  });
-
-  it('la liste des exceptions ne vise que du code hérité, une seule fois par fichier', () => {
-    // Given
-    const files = readSourceTree(repositoryRoot);
-
-    // When
-    const review = reviewExceptions(
-      findViolations(files),
-      legacyExceptions,
-      files.map((source) => source.path),
-    );
-
-    // Then
-    expect(review.invalidExceptions).toEqual([]);
-  });
-
-  it("l'override Biome du code hérité ne relâche que des fichiers encore exemptés dans legacy.ts", () => {
-    // Given
-    const includes = readBiomeLegacyOverride(repositoryRoot);
-
-    // When
-    const problems = reviewBiomeLegacyOverride(
-      includes,
-      legacyExceptions.map((exception) => exception.path),
-      existsInRepository(repositoryRoot),
-    );
-
-    // Then
-    expect(includes).not.toEqual([]);
+    expect(overrides.flatMap((override) => override.includes)).toEqual(['client/src/styles.css', 'public/icons/icon.svg']);
     expect(problems).toEqual([]);
   });
 });

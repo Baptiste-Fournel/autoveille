@@ -23,13 +23,22 @@ Base SQLite (`better-sqlite3`), serveur Fastify, TypeScript. Aucun service payan
 ```bash
 npm install
 cp .env.example .env
-DEMO=1 npm run dev          # http://localhost:3000, données d'exemple, première connexion sans code depuis la machine
-npm test                    # tests unitaires (parsing, filtres, dédoublonnage, messages, emails, robots.txt)
-npm run check               # typage
+DEMO=1 npm run dev          # serveur (relancé à chaque modification) + client Vite : ouvrir http://localhost:5173, qui relaie /api vers le serveur
+npm run demo                # ajoute les annonces d'exemple à la base locale (data/), sans redémarrer
+npm run verify              # typage (serveur, client, service worker), Biome, tests : à lancer avant chaque commit
+npm test                    # tests seuls : serveur et domaine sous Node, écrans sous jsdom
+npx playwright install chromium   # une fois par machine : le navigateur des parcours e2e (environ 570 Mo sur le disque)
+npm run test:e2e            # 4 parcours du GUIDE dans Chromium (Playwright), client reconstruit à chaque lancement
+npm run build               # compile le serveur dans dist/server et le client dans dist/client
+npm start                   # comme en production : dist/server sert dist/client sur http://localhost:3000
 npm run parse-email -- alerte.eml   # tester l'extraction sur un email enregistré (fichier .eml)
 ```
 
-Première connexion : si `SETUP_CODE` est vide dans `.env`, la page de première connexion n'est accessible que depuis la machine elle-même (localhost). Sur un serveur, `deploy/install.sh` génère ce code.
+Les parcours e2e (`tests/e2e/`) tournent contre `tests/e2e/server.ts`, lancé par Playwright : l'application composée comme en production, avec une base SQLite en mémoire par parcours, les annonces de démonstration, une boîte mail et un Internet simulés (aucune requête ne sort de la machine), sur les ports 4311 à 4314. Chaque parcours vérifie aussi qu'aucune ressource n'est demandée à Google Fonts et que la console ne signale aucune violation de la politique de sécurité (CSP).
+
+Première connexion : si `SETUP_CODE` est vide dans `.env`, la page de première connexion n'est accessible que depuis la machine elle-même (localhost), y compris à travers le client Vite. Sur un serveur, `deploy/install.sh` génère ce code.
+
+Le client est dans `client/` (Vite, Preact, signaux) et ne dépend que des types de `src/shared/api.ts`. La police Figtree est servie par l'application : en dehors des photos des annonces, que le navigateur charge depuis le site d'origine, aucune ressource n'est demandée à un autre site. Le thème choisi sur l'appareil est appliqué avant l'affichage par `/theme.js`, un script classique que `vite.config.ts` compile depuis `client/src/beforeFirstPaint.ts` (en développement comme au build). Le service worker (`client/src/sw.ts` : la page relue sur le serveur, la coque mise en cache en secours hors ligne, et les notifications) n'existe qu'au build : pour essayer les notifications, passer par `npm run build && npm start`.
 
 ## Calibrer l'extraction sur les vrais emails
 

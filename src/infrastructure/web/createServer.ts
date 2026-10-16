@@ -17,7 +17,7 @@ import { overviewRoutes } from './routes/overview.js';
 import { settingsRoutes } from './routes/settings.js';
 import { sourceRoutes } from './routes/sources.js';
 import { templateRoutes } from './routes/templates.js';
-import { vehicleListRoutes, vehicleRoutes } from './routes/vehicles.js';
+import { vehicleListRoutes, vehicleRoutes, vehicleSheetRoutes } from './routes/vehicles.js';
 import { securityHeaders } from './securityHeaders.js';
 import { pageOf, revalidatedUnlessCached, staticFiles } from './staticFiles.js';
 import type { WebDependencies } from './webDependencies.js';
@@ -35,7 +35,7 @@ const ROUTES: readonly RouteModule[] = [
   vehicleRoutes,
 ];
 
-const ROUTES_WITH_ETAG: readonly RouteModule[] = [overviewRoutes, vehicleListRoutes];
+const ROUTES_WITH_ETAG: readonly RouteModule[] = [overviewRoutes, vehicleListRoutes, vehicleSheetRoutes];
 
 const ROUTES_READ_FROM_ANOTHER_PAGE: readonly RouteModule[] = [importRoutes];
 

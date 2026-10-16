@@ -24,7 +24,10 @@ const unknownCastInside = (node: AstNode): AstNode | undefined => {
   return isAssertion(inner) && assertedType(inner)?.type === 'TSUnknownKeyword' ? inner : undefined;
 };
 
-const isUnsafe = (node: AstNode): boolean => assertedType(node)?.type === 'TSNeverKeyword' || unknownCastInside(node) !== undefined;
+const isUnknownCast = (node: AstNode): boolean => assertedType(node)?.type === 'TSUnknownKeyword';
+
+const isUnsafe = (node: AstNode): boolean =>
+  assertedType(node)?.type === 'TSNeverKeyword' || unknownCastInside(node) !== undefined || isUnknownCast(node);
 
 const typeText = (text: string, node: AstNode): string => {
   const type = assertedType(node);
@@ -39,17 +42,17 @@ const written = (text: string, node: AstNode): string => {
   return node.type === 'TSTypeAssertion' ? `<${typeText(text, node)}>` : `as ${typeText(text, node)}`;
 };
 
+const unsafeReason = (node: AstNode): string =>
+  isUnknownCast(node)
+    ? "« as unknown » seul est interdit partout, car suivi d'un « as » dans une autre instruction il revient à « as unknown as »"
+    : '« as unknown as » et « as never » sont interdits partout';
+
 export const assertionViolations = (file: SourceFile, program: AstNode, policy: AssertionPolicy): readonly Violation[] => {
   const assertions = descendantsOf(program).filter(isAssertion);
-  const unsafe = assertions.filter(isUnsafe);
-  const partOfUnsafe = unsafe.flatMap((node) => unknownCastInside(node) ?? []);
+  const partOfUnsafe = assertions.flatMap((node) => unknownCastInside(node) ?? []);
+  const unsafe = assertions.filter((node) => isUnsafe(node) && !partOfUnsafe.includes(node));
   const unsafeViolations = unsafe.map((node) =>
-    violationAt(
-      'unsafeAssertion',
-      file,
-      node.start,
-      `assertion « ${excerpt(written(file.text, node))} » : « as unknown as » et « as never » sont interdits partout`,
-    ),
+    violationAt('unsafeAssertion', file, node.start, `assertion « ${excerpt(written(file.text, node))} » : ${unsafeReason(node)}`),
   );
   const otherViolations =
     policy === 'onlyAsConst'

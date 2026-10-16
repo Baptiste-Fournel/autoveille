@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import type { BiomeOverride } from './biomeOverrides.js';
+import { isMarkup } from './markupComments.js';
 import type { SourceFile } from './violation.js';
 
 const scannedRoots = ['src', 'client', 'public', 'tests'];
@@ -10,8 +12,12 @@ const skippedDirectories = ['node_modules', '__snapshots__'];
 
 const toRepositoryPath = (root: string, absolutePath: string): string => relative(root, absolutePath).split(sep).join('/');
 
+const servedRoots = ['src', 'client', 'public'];
+
+const isServedMarkup = (path: string): boolean => isMarkup(path) && servedRoots.includes(path.split('/')[0] ?? '');
+
 const isScanned = (path: string): boolean =>
-  sourceFile.test(path) && !path.split('/').some((segment) => skippedDirectories.includes(segment));
+  (sourceFile.test(path) || isServedMarkup(path)) && !path.split('/').some((segment) => skippedDirectories.includes(segment));
 
 export const readSourceTree = (root: string): readonly SourceFile[] =>
   scannedRoots
@@ -25,16 +31,23 @@ export const readSourceTree = (root: string): readonly SourceFile[] =>
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null;
 
-const disablesFormatter = (override: unknown): boolean =>
-  isRecord(override) && isRecord(override.formatter) && override.formatter.enabled === false;
+const disablesFormatter = (override: Readonly<Record<string, unknown>>): boolean =>
+  isRecord(override.formatter) && override.formatter.enabled === false;
 
-export const readBiomeLegacyOverride = (root: string): readonly string[] => {
+const overrideOf = (override: unknown): readonly BiomeOverride[] =>
+  isRecord(override) && Array.isArray(override.includes)
+    ? [
+        {
+          includes: override.includes.filter((entry: unknown): entry is string => typeof entry === 'string'),
+          disablesFormatter: disablesFormatter(override),
+        },
+      ]
+    : [];
+
+export const readBiomeOverrides = (root: string): readonly BiomeOverride[] => {
   const configuration: unknown = JSON.parse(readFileSync(join(root, 'biome.json'), 'utf8'));
   const overrides = isRecord(configuration) && Array.isArray(configuration.overrides) ? configuration.overrides : [];
-  return overrides
-    .filter(disablesFormatter)
-    .flatMap((override: unknown) => (isRecord(override) && Array.isArray(override.includes) ? override.includes : []))
-    .filter((entry: unknown): entry is string => typeof entry === 'string');
+  return overrides.flatMap(overrideOf);
 };
 
 export const existsInRepository =
