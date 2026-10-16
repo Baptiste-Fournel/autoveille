@@ -1,5 +1,5 @@
 import { loadConfig } from '../../src/infrastructure/config/loadConfig.js';
-import type { ImapClientFactory } from '../../src/infrastructure/email/imap/imapMailboxReader.js';
+import type { ImapClientFactory } from '../../src/infrastructure/email/imap/imapClient.js';
 import type { WebPushClient } from '../../src/infrastructure/push/webPushChannel.js';
 import { type Application, buildApplication } from '../../src/main.js';
 import { type FakeClock, fakeClock } from '../fakes/fakeClock.js';

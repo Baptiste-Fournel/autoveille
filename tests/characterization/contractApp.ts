@@ -6,7 +6,7 @@ import { recordAlertConfirmation } from '../../src/domain/settings/alerts.js';
 import type { AlertInfo } from '../../src/domain/settings/types.js';
 import type { RawListing } from '../../src/domain/vehicle/types.js';
 import { loadConfig } from '../../src/infrastructure/config/loadConfig.js';
-import { imapFlowClient } from '../../src/infrastructure/email/imap/imapMailboxReader.js';
+import { imapFlowClient } from '../../src/infrastructure/email/imap/imapClient.js';
 import type { WebPushClient } from '../../src/infrastructure/push/webPushChannel.js';
 import { type Application, buildApplication } from '../../src/main.js';
 import { OWNER_PASSWORD, SESSION_COOKIE } from '../support/authentication.js';
@@ -387,7 +387,11 @@ export async function startContractApp(options: ContractAppOptions = {}): Promis
   const clock = steppingClock(A_WEEK_BEFORE);
   const client = servedClient();
   const application = await buildApplication({
-    config: loadConfig({ environment: { SETUP_CODE: options.setupCode ?? '' }, dotEnv: '', workingDirectory: '/srv/autoveille' }),
+    config: loadConfig({
+      environment: { SETUP_CODE: options.setupCode ?? '', IMAP_IDLE: '0' },
+      dotEnv: '',
+      workingDirectory: '/srv/autoveille',
+    }),
     databaseFile: ':memory:',
     staticDirectory: client.directory,
     clock,

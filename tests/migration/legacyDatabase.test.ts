@@ -62,8 +62,10 @@ const inTemporaryDirectory = async (run: (dir: string) => Promise<void> | void):
   }
 };
 
+const MAILBOX_READ_ONLY_ON_SCHEDULE = { IMAP_IDLE: '0' };
+
 const startedOn = async <Result>(file: string, run: (application: ComposedApplication) => Promise<Result> | Result): Promise<Result> => {
-  const application = await composedApplication({ databaseFile: file });
+  const application = await composedApplication({ databaseFile: file, environment: MAILBOX_READ_ONLY_ON_SCHEDULE });
   try {
     await application.start();
     return await run(application);

@@ -4,7 +4,7 @@ import type { EmailReadingSummary, ProcessedEmail } from '../../../src/applicati
 import { recordAlertConfirmation } from '../../../src/domain/settings/alerts.js';
 import type { AlertInfo } from '../../../src/domain/settings/types.js';
 import type { RawListing } from '../../../src/domain/vehicle/types.js';
-import type { ImapClient, ImapClientFactory } from '../../../src/infrastructure/email/imap/imapMailboxReader.js';
+import type { ImapClient, ImapClientFactory } from '../../../src/infrastructure/email/imap/imapClient.js';
 import { DEALER_MAILBOX } from '../../support/dealerMailbox.js';
 import { loadFixture } from '../../support/fixtures.js';
 import { signedInApplication } from '../../support/signedInApplication.js';
@@ -90,6 +90,8 @@ const TWO_LACENTRALE_LISTINGS: EmailReadingSummary['listings'] = [
   },
 ];
 
+const MAILBOX_READ_ONLY_ON_SCHEDULE = { IMAP_IDLE: '0' };
+
 const openedWhen =
   (factory: ImapClientFactory, allowed: Promise<void>): ImapClientFactory =>
   (options) => {
@@ -106,6 +108,7 @@ const openedWhen =
       search: (query, searchOptions) => client.search(query, searchOptions),
       fetchOne: (range, query, fetchOptions) => client.fetchOne(range, query, fetchOptions),
       logout: () => client.logout(),
+      on: (event, listener) => client.on(event, listener),
     };
     return gated;
   };
@@ -365,7 +368,10 @@ describe('vérifier maintenant et tout relire', () => {
     const mailboxAnswers = new Promise<void>((resolve) => {
       openMailbox = resolve;
     });
-    const { application, session } = await signedInApplication({ imapClient: openedWhen(imap.createClient, mailboxAnswers) });
+    const { application, session } = await signedInApplication({
+      environment: MAILBOX_READ_ONLY_ON_SCHEDULE,
+      imapClient: openedWhen(imap.createClient, mailboxAnswers),
+    });
     await application.server.inject({ method: 'PUT', url: '/api/settings', headers: session, payload: { imap: DEALER_MAILBOX } });
     await application.start();
     application.timers.advanceBy(5_000);

@@ -134,6 +134,26 @@ describe('lecture de la boîte mail en IMAP', () => {
     expect(imap.steps()).toEqual(['connect', 'lock Alertes', 'release Alertes', 'logout']);
   });
 
+  it('Gmail coupe la connexion (« read ECONNRESET ») pendant la lecture d’une alerte : la lecture échoue (« Connection not available ») au lieu d’arrêter le serveur, et la session se ferme sans lever', async () => {
+    // Given
+    let answerFetch = (): void => undefined;
+    const fetchAnswered = new Promise<void>((resolve) => {
+      answerFetch = resolve;
+    });
+    const imap = simulatedImapClient({ uidValidity: 7n, messages: THREE_ALERTS, fetchAnswered });
+    const session = await imapMailboxReader(imap.createClient).open(ALERTS_FOLDER);
+    const reading = session.read(43);
+
+    // When
+    imap.cutConnections(Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }));
+    answerFetch();
+
+    // Then
+    await expect(reading).rejects.toThrow('Connection not available');
+    await expect(session.close()).resolves.toBeUndefined();
+    expect(imap.openConnections()).toEqual([]);
+  });
+
   it('un nom de serveur mal saisi : l’ouverture échoue avec le message de Node, classé serveur injoignable, sans déconnexion à faire', async () => {
     // Given
     const imap = simulatedImapClient({ connectFailure: new Error('getaddrinfo ENOTFOUND imap.gmial.com') });

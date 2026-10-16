@@ -33,3 +33,12 @@ export const truncatedEmailLog = (siteName: string, announced: number, received:
 export const truncatedDigestNotificationFailedLog = (error: string): string => `notification résumé tronqué : ${error}`;
 
 export const mailboxPassLog = (detail: string): string => `email: ${detail}`;
+
+export const MAILBOX_WATCH_CLOSED = 'connexion fermée';
+
+export const mailboxWatchListeningLog = (mailbox: string): string => `IMAP IDLE : à l’écoute de « ${mailbox} »`;
+
+export const mailboxWatchRetryLog = (reason: string, delayMs: number): string =>
+  `IMAP IDLE interrompu (${reason}), nouvel essai dans ${delayMs / 1_000} s`;
+
+export const mailboxWatchReadFailedLog = (error: string): string => `lecture déclenchée par IMAP IDLE en échec : ${error}`;

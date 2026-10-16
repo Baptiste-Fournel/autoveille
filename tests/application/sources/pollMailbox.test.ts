@@ -562,6 +562,79 @@ describe('une seule lecture de la boîte à la fois', () => {
     expect(world.vehicles.allVehicles()).toHaveLength(2);
   });
 
+  it('Gmail signale une nouvelle alerte pendant la lecture planifiée : une seconde lecture suit celle en cours, au lieu de s’y joindre', async () => {
+    // Given
+    const world = mailWorld([leboncoinAlert(41, '2026-10-15T07:12:04.000Z', [PORSCHE_911_4S])]);
+    const polling = mailboxPolling(world);
+    const scheduled = polling.poll();
+
+    // When
+    const signalled = polling.pollForNewEmail();
+    await Promise.all([scheduled, signalled]);
+
+    // Then
+    expect(signalled).not.toBe(scheduled);
+    expect(world.mailboxReader.openings()).toHaveLength(2);
+  });
+
+  it('trois alertes signalées par Gmail pendant une même lecture : une seule lecture de plus, après celle en cours', async () => {
+    // Given
+    const world = mailWorld([leboncoinAlert(41, '2026-10-15T07:12:04.000Z', [PORSCHE_911_4S])]);
+    const polling = mailboxPolling(world);
+    const signalledFirst = polling.pollForNewEmail();
+
+    // When
+    const signalledDuring = [polling.pollForNewEmail(), polling.pollForNewEmail(), polling.pollForNewEmail()];
+    await Promise.all([signalledFirst, ...signalledDuring]);
+
+    // Then
+    expect(new Set(signalledDuring).size).toBe(1);
+    expect(world.mailboxReader.openings()).toHaveLength(2);
+  });
+
+  it('le disque du serveur plein fait échouer la lecture en cours : l’alerte signalée par Gmail pendant ce temps est lue quand même juste après', async () => {
+    // Given
+    const world = mailWorld([leboncoinAlert(41, '2026-10-15T07:12:04.000Z', [PORSCHE_911_4S])]);
+    let failedRecords = 0;
+    const polling = mailboxPolling({
+      ...world,
+      sourceRuns: {
+        ...world.sourceRuns,
+        record: (run) => {
+          if (failedRecords < 2) {
+            failedRecords += 1;
+            throw new Error('SQLITE_FULL: database or disk is full');
+          }
+          world.sourceRuns.record(run);
+        },
+      },
+    });
+    const scheduled = polling.poll();
+
+    // When
+    const signalled = polling.pollForNewEmail();
+    const scheduledFailure = await scheduled.catch((error: unknown) => error);
+    await signalled;
+
+    // Then
+    expect(scheduledFailure).toEqual(new Error('SQLITE_FULL: database or disk is full'));
+    expect(world.mailboxReader.openings()).toHaveLength(2);
+    expect(world.sourceRuns.all()).toHaveLength(1);
+  });
+
+  it('une alerte signalée par Gmail quand aucune lecture n’est en cours : la boîte est lue une fois', async () => {
+    // Given
+    const world = mailWorld([leboncoinAlert(41, '2026-10-15T07:12:04.000Z', [PORSCHE_911_4S])]);
+    const polling = mailboxPolling(world);
+
+    // When
+    const signalled = await polling.pollForNewEmail();
+
+    // Then
+    expect(signalled.detail).toBe('1 email(s) lu(s), 1 annonce(s), 1 nouvelle(s) correspondant aux réglages');
+    expect(world.mailboxReader.openings()).toHaveLength(1);
+  });
+
   it('comportement hérité : « Tout relire » ne relit que les emails des trois derniers jours, comme une première lecture', async () => {
     // Given
     const world = mailWorld([

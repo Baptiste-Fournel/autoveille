@@ -45,6 +45,7 @@ describe('configuration lue dans le fichier .env et l’environnement', () => {
       contactEmail: '',
       imapPollMinutes: 2,
       httpPollMinutes: 30,
+      imapIdle: true,
       demo: false,
     });
   });
@@ -84,6 +85,7 @@ describe('configuration lue dans le fichier .env et l’environnement', () => {
       contactEmail: '',
       imapPollMinutes: 2,
       httpPollMinutes: 30,
+      imapIdle: true,
       demo: false,
     });
   });
@@ -148,6 +150,29 @@ describe('configuration lue dans le fichier .env et l’environnement', () => {
     // Then
     expect(failure).toBeInstanceOf(InvalidConfiguration);
     expect(failure instanceof Error ? failure.message : undefined).toBe('IMAP_POLL_MINUTES doit être un nombre (valeur lue : « deux »).');
+  });
+
+  it('IMAP_IDLE=0 dans le .env : la boîte n’est plus surveillée en IDLE, seulement relue à la cadence d’IMAP_POLL_MINUTES', () => {
+    // Given
+    const dotEnv = `${INSTALLED_DOT_ENV}IMAP_IDLE=0\n`;
+
+    // When
+    const config = loadConfig({ environment: {}, dotEnv, workingDirectory: APP_DIRECTORY });
+
+    // Then
+    expect(config.imapIdle).toBe(false);
+  });
+
+  it('IMAP_IDLE=oui au lieu de 1 arrête le démarrage avec un message clair, au lieu de deviner', () => {
+    // Given
+    const dotEnv = `${INSTALLED_DOT_ENV}IMAP_IDLE=oui\n`;
+
+    // When
+    const failure = configFailure(() => loadConfig({ environment: {}, dotEnv, workingDirectory: APP_DIRECTORY }));
+
+    // Then
+    expect(failure).toBeInstanceOf(InvalidConfiguration);
+    expect(failure instanceof Error ? failure.message : undefined).toBe('IMAP_IDLE doit valoir 0 ou 1 (valeur lue : « oui »).');
   });
 
   it('PORT laissé vide dans le .env arrête le démarrage avec un message clair, au lieu d’écouter sur un port au hasard', () => {

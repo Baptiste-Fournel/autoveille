@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { describeMailboxFailure } from '../../../../src/application/sources/describeMailboxFailure.js';
 import { friendlyError } from '../../../../src/infrastructure/email/imap/friendlyError.js';
-
-const imapflowRefusal = (): Error =>
-  Object.assign(new Error('Command failed'), {
-    authenticationFailed: true,
-    responseStatus: 'NO',
-    responseText: 'Invalid credentials (Failure)',
-    serverResponseCode: 'AUTHENTICATIONFAILED',
-  });
+import { gmailRefusesPassword } from '../../../support/imapflowErrors.js';
 
 describe('classement d’un échec IMAP', () => {
   it('un serveur Exchange qui refuse la session (« Authentication failed ») : refus d’authentification, et le message parle du mot de passe d’application', () => {
@@ -61,7 +54,7 @@ describe('classement d’un échec IMAP', () => {
 
   it('comportement hérité : Gmail refuse le mot de passe habituel, imapflow ne lève que « Command failed » : classé erreur de lecture, le message ne parle pas du mot de passe d’application', () => {
     // Given
-    const error = imapflowRefusal();
+    const error = gmailRefusesPassword();
 
     // When
     const unavailable = friendlyError(error);

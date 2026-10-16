@@ -1,4 +1,4 @@
-import type { ImapClient, ImapClientFactory } from '../../src/infrastructure/email/imap/imapMailboxReader.js';
+import type { ImapClient, ImapClientFactory } from '../../src/infrastructure/email/imap/imapClient.js';
 import { type StoredImapMessage, simulatedImapClient } from './simulatedImapClient.js';
 
 export interface AlertEmail {
@@ -71,6 +71,7 @@ export const dealerInbox = (): DealerInbox => {
         search: (query, searchOptions) => client.search(query, searchOptions),
         fetchOne: readOnce(client),
         logout: () => client.logout(),
+        on: (event, listener) => client.on(event, listener),
       };
     },
     receive: (...received) => {

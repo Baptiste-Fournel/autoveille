@@ -10,6 +10,7 @@ import {
   truncatedEmailLog,
 } from '../../domain/presentation/mailbox.js';
 import { recordAlertConfirmation } from '../../domain/settings/alerts.js';
+import { isMailboxReadable } from '../../domain/settings/mailboxConfigured.js';
 import type { MailboxSettings } from '../../domain/settings/types.js';
 import { siteForSender, siteLabel } from '../../domain/sites/catalog.js';
 import { detectAlertConfirmation } from '../../domain/sites/confirmations.js';
@@ -38,6 +39,7 @@ export interface PollMailboxDependencies extends IngestDependencies, AlertEmailR
 
 export interface MailboxPolling {
   readonly poll: () => Promise<SourceRunSummary>;
+  readonly pollForNewEmail: () => Promise<SourceRunSummary>;
   readonly rereadAll: () => Promise<SourceRunSummary>;
 }
 
@@ -231,7 +233,7 @@ const recordPass = (dependencies: PollMailboxDependencies, ok: boolean, detail: 
 
 export const pollMailbox = async (dependencies: PollMailboxDependencies): Promise<SourceRunSummary> => {
   const { imap } = dependencies.settings.load();
-  if (!imap.user || !imap.pass || !imap.host) {
+  if (!isMailboxReadable(imap)) {
     return { source: MAIL_SOURCE, ok: false, detail: MAILBOX_NOT_CONFIGURED };
   }
   try {
@@ -248,6 +250,7 @@ export const pollMailbox = async (dependencies: PollMailboxDependencies): Promis
 
 export const mailboxPolling = (dependencies: PollMailboxDependencies): MailboxPolling => {
   let inProgress: Promise<SourceRunSummary> | undefined;
+  let followingPass: Promise<SourceRunSummary> | undefined;
   const poll = (): Promise<SourceRunSummary> => {
     if (inProgress === undefined) {
       inProgress = pollMailbox(dependencies).finally(() => {
@@ -256,10 +259,23 @@ export const mailboxPolling = (dependencies: PollMailboxDependencies): MailboxPo
     }
     return inProgress;
   };
+  const pollForNewEmail = (): Promise<SourceRunSummary> => {
+    if (inProgress === undefined) {
+      return poll();
+    }
+    if (followingPass === undefined) {
+      const pollAgain = (): Promise<SourceRunSummary> => {
+        followingPass = undefined;
+        return poll();
+      };
+      followingPass = inProgress.then(pollAgain, pollAgain);
+    }
+    return followingPass;
+  };
   const rereadAll = async (): Promise<SourceRunSummary> => {
     await inProgress;
     dependencies.mailboxState.forgetReadEmails();
     return poll();
   };
-  return { poll, rereadAll };
+  return { poll, pollForNewEmail, rereadAll };
 };

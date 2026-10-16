@@ -12,6 +12,7 @@ export interface Config {
   readonly contactEmail: string;
   readonly imapPollMinutes: number;
   readonly httpPollMinutes: number;
+  readonly imapIdle: boolean;
   readonly demo: boolean;
 }
 
@@ -35,9 +36,20 @@ const numberOf = (variables: Variables, name: string, fallback: number): number 
   }
   const parsed = value.trim() === '' ? Number.NaN : Number(value);
   if (!Number.isFinite(parsed)) {
-    throw new InvalidConfiguration(name, value);
+    throw new InvalidConfiguration(name, value, 'number');
   }
   return parsed;
+};
+
+const switchOf = (variables: Variables, name: string, fallback: boolean): boolean => {
+  const value = variables(name);
+  if (value === undefined) {
+    return fallback;
+  }
+  if (value !== '0' && value !== '1') {
+    throw new InvalidConfiguration(name, value, 'zeroOrOne');
+  }
+  return value === '1';
 };
 
 export const loadConfig = (sources: ConfigSources): Config => {
@@ -52,6 +64,7 @@ export const loadConfig = (sources: ConfigSources): Config => {
     contactEmail: variables('CONTACT_EMAIL') ?? '',
     imapPollMinutes: numberOf(variables, 'IMAP_POLL_MINUTES', 2),
     httpPollMinutes: numberOf(variables, 'HTTP_POLL_MINUTES', 30),
+    imapIdle: switchOf(variables, 'IMAP_IDLE', true),
     demo: variables('DEMO') === '1',
   };
 };

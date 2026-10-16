@@ -5,6 +5,7 @@ import { mailboxPolling } from '../../../src/application/sources/pollMailbox.js'
 import type { SourceRunSummary } from '../../../src/application/sources/sourceRunSummary.js';
 import type { HttpSite } from '../../../src/domain/settings/types.js';
 import { IntervalScheduler, type ScheduledSources } from '../../../src/infrastructure/scheduling/intervalScheduler.js';
+import { mailboxPollingMinutes } from '../../../src/infrastructure/scheduling/mailboxPollingMinutes.js';
 import { fakeListingExtractor } from '../../fakes/fakeListingExtractor.js';
 import { fakeSiteFetcher } from '../../fakes/fakeSiteFetcher.js';
 import { settingsWithDealerMailbox } from '../../support/dealerMailbox.js';
@@ -111,6 +112,45 @@ describe('lectures planifiées de la boîte mail et des sites', () => {
     // Then
     expect(sources.mailboxPasses()).toBe(1 + 10);
     expect(sources.httpSitesPasses()).toBe(1 + 2);
+  });
+
+  it('IMAP IDLE actif avec IMAP_POLL_MINUTES=2 du .env.example : la boîte n’est plus relue qu’en filet, toutes les dix minutes', () => {
+    // Given
+    const timers = manualTimers();
+    const sources = countedSources();
+    new IntervalScheduler(sources, timers, NO_FAILURE).start({ mailboxMinutes: mailboxPollingMinutes(2, true), httpSitesMinutes: 30 });
+
+    // When
+    timers.advanceBy(60 * MINUTE_MS);
+
+    // Then
+    expect(sources.mailboxPasses()).toBe(1 + 6);
+  });
+
+  it('IMAP IDLE actif avec IMAP_POLL_MINUTES=30 : la demi-heure choisie pour le filet est gardée', () => {
+    // Given
+    const timers = manualTimers();
+    const sources = countedSources();
+    new IntervalScheduler(sources, timers, NO_FAILURE).start({ mailboxMinutes: mailboxPollingMinutes(30, true), httpSitesMinutes: 30 });
+
+    // When
+    timers.advanceBy(60 * MINUTE_MS);
+
+    // Then
+    expect(sources.mailboxPasses()).toBe(1 + 2);
+  });
+
+  it('IMAP_IDLE=0 avec IMAP_POLL_MINUTES=2 : la boîte est relue toutes les deux minutes, comme avant IDLE', () => {
+    // Given
+    const timers = manualTimers();
+    const sources = countedSources();
+    new IntervalScheduler(sources, timers, NO_FAILURE).start({ mailboxMinutes: mailboxPollingMinutes(2, false), httpSitesMinutes: 30 });
+
+    // When
+    timers.advanceBy(60 * MINUTE_MS);
+
+    // Then
+    expect(sources.mailboxPasses()).toBe(1 + 30);
   });
 
   it('l’arrêt du serveur juste après le démarrage arrête les lectures planifiées, la première comprise', () => {

@@ -8,14 +8,19 @@ import { ensureSecrets } from './application/auth/ensureSecrets.js';
 import { deleteExpiredSessions } from './application/auth/session.js';
 import { hasNoRecentVehicle, seedDemo } from './application/ingest/seedDemo.js';
 import type { Clock } from './application/ports/clock.js';
+import type { Logger } from './application/ports/logger.js';
+import type { SettingsRepository } from './application/ports/settingsRepository.js';
 import { errorMessage } from './application/sources/errorMessage.js';
 import { httpSitesFetching } from './application/sources/fetchHttpSites.js';
 import { mailboxPolling } from './application/sources/pollMailbox.js';
 import type { AlertEmailReadingDependencies } from './application/sources/readAlertEmail.js';
+import { mailboxWatchReadFailedLog } from './domain/presentation/mailbox.js';
 import { DEMO_LOADED_TEXT, firstSignInText, scheduledPassFailedLog, sessionCleanupFailedLog } from './domain/presentation/startup.js';
 import { readDotEnvFile } from './infrastructure/config/dotEnv.js';
 import { type Config, loadConfig } from './infrastructure/config/loadConfig.js';
-import { type ImapClientFactory, imapFlowClient, imapMailboxReader } from './infrastructure/email/imap/imapMailboxReader.js';
+import { type ImapClientFactory, imapFlowClient } from './infrastructure/email/imap/imapClient.js';
+import { imapMailboxReader } from './infrastructure/email/imap/imapMailboxReader.js';
+import { imapMailboxWatcher } from './infrastructure/email/imap/imapMailboxWatcher.js';
 import { cheerioListingExtractor } from './infrastructure/extraction/cheerioListingExtractor.js';
 import { fetchRedirectResolver } from './infrastructure/http/fetchRedirectResolver.js';
 import { fetchSiteFetcher } from './infrastructure/http/fetchSiteFetcher.js';
@@ -35,6 +40,7 @@ import { SqliteVehicleRepository } from './infrastructure/persistence/sqlite/sql
 import { type WebPushClient, webPushChannel } from './infrastructure/push/webPushChannel.js';
 import { webPushKeyGenerator } from './infrastructure/push/webPushKeyGenerator.js';
 import { IntervalScheduler } from './infrastructure/scheduling/intervalScheduler.js';
+import { mailboxPollingMinutes } from './infrastructure/scheduling/mailboxPollingMinutes.js';
 import { systemTimers, type Timers } from './infrastructure/scheduling/timers.js';
 import { cryptoRandom } from './infrastructure/system/cryptoRandom.js';
 import { scryptPasswordHasher } from './infrastructure/system/scryptPasswordHasher.js';
@@ -88,9 +94,27 @@ export const buildApplication = async <Handle>(environment: ApplicationEnvironme
     passwordHasher: scryptPasswordHasher,
     configuredAppPassword: config.appPassword,
   });
+  const storedSettings = new SqliteSettingsRepository(database);
+  const logger: Logger = { info: (message) => server.log.info(message) };
+  const reportPassFailure = (error: unknown): void => server.log.error(scheduledPassFailedLog(errorMessage(error)));
+  const reportWatchedReadFailure = (error: unknown): void => server.log.error(mailboxWatchReadFailedLog(errorMessage(error)));
+  const mailboxWatch = imapMailboxWatcher({
+    createClient: environment.imapClient,
+    timers,
+    settings: storedSettings,
+    readMailbox: () => void sources.mailbox.pollForNewEmail().catch(reportWatchedReadFailure),
+    logger,
+  });
+  const settings: SettingsRepository = {
+    load: () => storedSettings.load(),
+    save: (saved) => {
+      storedSettings.save(saved);
+      mailboxWatch.settingsSaved();
+    },
+  };
   const ports: ApplicationPorts = {
     vehicles: new SqliteVehicleRepository(database),
-    settings: new SqliteSettingsRepository(database),
+    settings,
     secrets,
     sessions: new SqliteSessionRepository(database),
     subscriptions: new SqlitePushSubscriptionRepository(database),
@@ -100,7 +124,7 @@ export const buildApplication = async <Handle>(environment: ApplicationEnvironme
     geocoder: geoApiGouvGeocoder(environment.fetch, timers, new SqliteGeoCache(database)),
     clock,
     random: cryptoRandom,
-    logger: { info: (message) => server.log.info(message) },
+    logger,
     channel: { ...webPushChannel(pushKeys, config.contactEmail, environment.webPush), ...telegramChannel(environment.fetch) },
     address: { configuredBaseUrl: config.baseUrl, port: config.port },
     mailboxReader: imapMailboxReader(environment.imapClient),
@@ -128,7 +152,7 @@ export const buildApplication = async <Handle>(environment: ApplicationEnvironme
       server.log.error(sessionCleanupFailedLog(errorMessage(error)));
     }
   };
-  const scheduler = new IntervalScheduler(sources, timers, (error) => server.log.error(scheduledPassFailedLog(errorMessage(error))));
+  const scheduler = new IntervalScheduler(sources, timers, reportPassFailure);
   let sessionCleanup: Handle | undefined;
   return {
     server,
@@ -141,10 +165,17 @@ export const buildApplication = async <Handle>(environment: ApplicationEnvironme
         await seedDemo(ports);
         server.log.info(DEMO_LOADED_TEXT);
       }
-      scheduler.start({ mailboxMinutes: config.imapPollMinutes, httpSitesMinutes: config.httpPollMinutes });
+      scheduler.start({
+        mailboxMinutes: mailboxPollingMinutes(config.imapPollMinutes, config.imapIdle),
+        httpSitesMinutes: config.httpPollMinutes,
+      });
+      if (config.imapIdle) {
+        mailboxWatch.start();
+      }
     },
     stop: async () => {
       scheduler.stop();
+      await mailboxWatch.stop();
       if (sessionCleanup !== undefined) {
         timers.clearInterval(sessionCleanup);
       }
