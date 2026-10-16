@@ -39,6 +39,24 @@ const AUTOSCOUT24_LINKS_RESOLVED_OVER_HTTP = new Map([
   ['https://links.autoscout24.com/u/click?_t=t1&_m=m1&_e=e6', 'https://play.google.com/store/apps/details?id=com.autoscout24'],
 ]);
 
+const GLC = 'https://www.lacentrale.fr/auto-occasion-annonce-69115740001.html';
+const VITO = 'https://www.lacentrale.fr/auto-occasion-annonce-69115740002.html';
+const GLA = 'https://www.lacentrale.fr/auto-occasion-annonce-69115740003.html';
+const AUDI_Q3 = 'https://www.lacentrale.fr/auto-occasion-annonce-69115740004.html';
+
+const laCentraleTrackedLinksResolvedTo = (
+  firstLinkOfEachAd: Readonly<Record<number, string>>,
+  linksPerAd: number,
+): ReadonlyMap<string, string> =>
+  new Map(
+    Object.entries(firstLinkOfEachAd).flatMap(([first, ad]) =>
+      Array.from(
+        { length: linksPerAd },
+        (_, offset) => [`https://clicks.mail-alerte.lacentrale.fr/f/a/t${Number(first) + offset}~~/AAAHahA~/x`, ad] as const,
+      ),
+    ),
+  );
+
 const LA_CENTRALE_DIGEST = {
   html: loadFixture('emails/lacentrale/61-nouvelles-annonces-dont-3-en-apercu.html'),
   from: 'info@mail-alerte.lacentrale.fr',
@@ -423,6 +441,67 @@ describe('lecture des emails d’alerte', () => {
     // Then
     expect(out.listings).toHaveLength(1);
     expect(out.listings[0]).toMatchObject({ title: 'LAND ROVER DISCOVERY SPORT', price: 14500, imageUrl: undefined });
+  });
+
+  it("un vrai email La Centrale de baisses de prix : la photo de chaque voiture est le fond de sa cellule, et son titre s'arrête avant l'année et les caractéristiques", () => {
+    // Given
+    const email = {
+      html: loadFixture('emails/lacentrale/baisses-de-prix-avec-la-photo-en-fond-de-cellule.html'),
+      from: 'info@mail-alerte.lacentrale.fr',
+      subject: '↘️ 4 baisses de prix sur votre alerte',
+    };
+
+    // When
+    const out = readingOf(email, laCentraleTrackedLinksResolvedTo({ 3: GLC, 7: VITO, 11: GLA }, 4));
+
+    // Then
+    expect(classifyEmail(email.subject)).toBe('price_drop');
+    expect(out.listings.map((listing) => listing.title)).toEqual(['MERCEDES GLC', 'MERCEDES VITO', 'MERCEDES GLA']);
+    expect(out.listings[0]).toMatchObject({
+      price: 48000,
+      km: 61800,
+      year: 2023,
+      sellerType: 'particulier',
+      postalCode: '33',
+      city: 'Gironde (33)',
+    });
+    expect(out.listings[1]).toMatchObject({ price: 35000, km: 130000, year: 2023, postalCode: '16', city: 'Charente (16)' });
+    expect(out.listings[2]).toMatchObject({ price: 39300, km: 12500, year: 2025 });
+    expect(out.listings.map((listing) => listing.imageUrl)).toEqual([
+      expect.stringMatching(/^https:\/\/pictures\.lacentrale\.fr\/classifieds\/B104291334_/),
+      expect.stringMatching(/^https:\/\/pictures\.lacentrale\.fr\/classifieds\/B104255901_/),
+      expect.stringMatching(/^https:\/\/pictures\.lacentrale\.fr\/classifieds\/B104233443_/),
+    ]);
+    expect(out.listings.every((listing) => !('publishedAt' in listing))).toBe(true);
+    expect(out.moreUrl).toContain('https://www.lacentrale.fr/listing?');
+    expect(out.moreUrl).toContain('priceDropLimitDate=true');
+  });
+
+  it('une alerte ciblée La Centrale (« 1 AUDI disponible ») sans photo de la voiture : le lien « Vendeur particulier » ne fait pas titre, « AUDI Q3 II » oui', () => {
+    // Given
+    const email = {
+      html: loadFixture('emails/lacentrale/alerte-ciblee-une-annonce-sans-photo-et-un-lien-vendeur-particulier.html'),
+      from: 'info@mail-alerte.lacentrale.fr',
+      subject: '1 AUDI disponible 🚗',
+    };
+
+    // When
+    const out = readingOf(email, laCentraleTrackedLinksResolvedTo({ 4: AUDI_Q3 }, 10));
+
+    // Then
+    expect(classifyEmail(email.subject)).toBe('new');
+    expect(announcedCount(email.subject)).toBe(1);
+    expect(out.listings).toHaveLength(1);
+    expect(out.listings[0]).toMatchObject({
+      title: 'AUDI Q3 II',
+      price: 32900,
+      km: 66000,
+      sellerType: 'particulier',
+      postalCode: '40',
+      city: 'Landes (40)',
+      url: AUDI_Q3,
+    });
+    expect(out.listings[0]?.imageUrl).toBeUndefined();
   });
 
   it('un email La Centrale de nouvelles annonces donne la photo de chaque annonce ; la date de l’email est posée ensuite par la lecture de la boîte', () => {

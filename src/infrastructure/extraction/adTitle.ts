@@ -1,6 +1,7 @@
 import type { CheerioAPI } from 'cheerio';
 import type { AnyNode } from 'domhandler';
 import { parseLocation } from '../../domain/parsing/location.js';
+import { escapeRegExp } from '../../domain/parsing/regex.js';
 import { cleanText } from '../../domain/parsing/text.js';
 import type { AdAnchor } from './adAnchor.js';
 import { PRICE_OR_KM_MENTION } from './priceOrKmMention.js';
@@ -10,6 +11,12 @@ const CALL_TO_ACTION =
   /^(voir|voir l'annonce|voir l’annonce|détails|details|consulter|contacter|j'y vais|découvrir|cliquez|en savoir plus|voir plus|voir toutes?|afficher|ouvrir)$/i;
 
 const SPEC_LINE = new RegExp(`${PRICE_OR_KM_MENTION.source}|\\bann[ée]e\\s*:?\\s*\\d{4}\\b|^\\d{4}\\b`, 'i');
+
+const SELLER_LABEL = /^vendeur\s+(particulier|professionnel|pro)\b/i;
+
+const BLOCK_LINE_SEPARATOR = /[|•●·\n]/;
+
+const TRAILING_YEAR_AFTER_A_NAME = /^(\S+\s+\S.*?)\s+(?:19|20)\d{2}$/;
 
 const MIN_TITLE_LENGTH = 6;
 
@@ -29,7 +36,13 @@ export const cleanTitle = (text: string): string =>
 
 const longest = (texts: readonly string[]): string => texts.reduce((kept, text) => (text.length > kept.length ? text : kept), '');
 
-const isLinkTitle = (text: string): boolean => text.length >= MIN_TITLE_LENGTH && !CALL_TO_ACTION.test(text) && !/^https?:/i.test(text);
+const isLinkTitle = (text: string): boolean =>
+  text.length >= MIN_TITLE_LENGTH && !CALL_TO_ACTION.test(text) && !SELLER_LABEL.test(text) && !/^https?:/i.test(text);
+
+const withoutSiteName = (text: string, siteLabel: string): string =>
+  cleanText(text.replace(new RegExp(escapeRegExp(siteLabel), 'gi'), ' '));
+
+const withoutTrailingYear = (line: string): string => TRAILING_YEAR_AFTER_A_NAME.exec(line)?.[1] ?? line;
 
 export const htmlAdTitle = (
   $: CheerioAPI,
@@ -37,7 +50,7 @@ export const htmlAdTitle = (
   block: readonly AnyNode[],
   blockText: string,
 ): string | undefined => {
-  const candidates = group.map((anchor) => anchor.text).filter(isLinkTitle);
+  const candidates = group.map((anchor) => withoutSiteName(anchor.text, anchor.ref.siteLabel)).filter(isLinkTitle);
   const titles = candidates.filter((text) => !SPEC_LINE.test(text));
   if (titles.length > 0) {
     return cleanTitle(longest(titles));
@@ -56,8 +69,10 @@ export const htmlAdTitle = (
   if (alt) {
     return cleanTitle(alt);
   }
-  const firstLine = blockText.split(/[|•\n]/)[0]?.trim();
-  return firstLine && firstLine.length >= MIN_TITLE_LENGTH ? cleanTitle(firstLine.slice(0, MAX_FIRST_LINE_LENGTH)) : undefined;
+  const firstLine = blockText.split(BLOCK_LINE_SEPARATOR)[0]?.trim();
+  return firstLine && firstLine.length >= MIN_TITLE_LENGTH
+    ? cleanTitle(withoutTrailingYear(firstLine.slice(0, MAX_FIRST_LINE_LENGTH)))
+    : undefined;
 };
 
 const isTextTitle = (line: string): boolean => {

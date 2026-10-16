@@ -12,4 +12,15 @@ describe('département lu à la fin du bloc d’une annonce', () => {
     // Then
     expect(department).toEqual({ city: 'Gironde (33)', postalCode: '33' });
   });
+
+  it('« Vendeur particulier ● 16 » suivi du bouton « Voir l’annonce » d’une baisse de prix La Centrale situe la voiture en Charente (16)', () => {
+    // Given
+    const block = 'MERCEDES VITO 2023 ● Automatique ● 130 000 km ● Diesel 35 000 € Vendeur particulier ● 16 Voir l’annonce';
+
+    // When
+    const department = parseDepartment(block);
+
+    // Then
+    expect(department).toEqual({ city: 'Charente (16)', postalCode: '16' });
+  });
 });

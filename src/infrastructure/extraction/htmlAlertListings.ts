@@ -7,6 +7,7 @@ import { parseLocation } from '../../domain/parsing/location.js';
 import { parsePrice } from '../../domain/parsing/price.js';
 import { cleanText } from '../../domain/parsing/text.js';
 import { parseYear } from '../../domain/parsing/year.js';
+import { asWebAddress } from '../../domain/sites/webAddress.js';
 import type { AdAnchor, AnchorKeyOf } from './adAnchor.js';
 import { adBlock } from './adBlock.js';
 import { adDescription } from './adDescription.js';
@@ -24,8 +25,8 @@ type EmailLinkReading =
   | { readonly kind: 'other'; readonly link: CaptionedLink };
 
 const linkReading = ($: CheerioAPI, element: Element, context: ReadingContext): readonly EmailLinkReading[] => {
-  const href = ($(element).attr('href') ?? '').trim();
-  if (!/^https?:/i.test(href)) {
+  const href = asWebAddress($(element).attr('href') ?? '');
+  if (href === undefined) {
     return [];
   }
   const target = linkTarget(href, context.emailSite, context.resolvedLinks);

@@ -8,13 +8,13 @@ const SUBJECT_WORDING: readonly (readonly [DetectedKind, RegExp])[] = [
   ['recap', /r[ée]capitulatif|r[ée]sum[ée]|hebdo|de la semaine|digest|s[ée]lection|recommand|vous avez manqu|coups? de c[œo]ur/i],
   [
     'new',
-    /nouvelle?s? annonces?|nouveaux? v[ée]hicules?|nouveaux? r[ée]sultats?|nouvelle?s? offres?|correspond(ent)? [àa] (votre|ta) recherche|nouvelle annonce/i,
+    /nouvelle?s? annonces?|nouveaux? v[ée]hicules?|nouveaux? r[ée]sultats?|nouvelle?s? offres?|correspond(ent)? [àa] (votre|ta) recherche|nouvelle annonce|^\W*\d{1,4}\s+\S.*\bdisponibles?\b/i,
   ],
 ];
 
 const KINDS_ABOUT_OLDER_ADS: readonly EmailKind[] = ['price_drop', 'reminder', 'recap'];
 
-const ANNOUNCED_COUNT = /(\d{1,4})\s+nouve(?:aux?|lles?)\s+(?:annonces?|v[ée]hicules?|r[ée]sultats?|offres?)/i;
+const ANNOUNCED_COUNT = /(\d{1,4})\s+(?:nouve(?:aux?|lles?)\s+(?:annonces?|v[ée]hicules?|r[ée]sultats?|offres?)|\S+\s+disponibles?\b)/i;
 
 export function classifyEmail(subject?: string): EmailKind {
   if (!subject) {

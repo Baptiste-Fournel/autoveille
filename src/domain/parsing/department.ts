@@ -102,8 +102,15 @@ const DEPARTMENT_NAMES: Readonly<Record<string, string>> = {
   '95': 'Val-d’Oise',
 };
 
+const CODE = '(0[1-9]|[1-8]\\d|9[0-5])';
+
+const AFTER_THE_SELLER = new RegExp(`vendeur\\s+(?:particulier|professionnel|pro)\\s*[●•·|]?\\s*${CODE}(?=\\s*$|\\s+voir\\b)`, 'i');
+
+const AT_THE_END = new RegExp(`\\s${CODE}\\s*$`, 'i');
+
 export function parseDepartment(text: string): DepartmentLocation | undefined {
-  const code = /(?:vendeur\s+(?:particulier|professionnel|pro)\s+|\s)(0[1-9]|[1-8]\d|9[0-5])\s*$/i.exec(cleanText(text))?.[1];
+  const cleaned = cleanText(text);
+  const code = AFTER_THE_SELLER.exec(cleaned)?.[1] ?? AT_THE_END.exec(cleaned)?.[1];
   const name = code === undefined ? undefined : DEPARTMENT_NAMES[code];
   return code !== undefined && name ? { city: `${name} (${code})`, postalCode: code } : undefined;
 }

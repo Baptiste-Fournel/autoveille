@@ -32,6 +32,20 @@ describe('sujet d’un email d’alerte', () => {
     expect(none).toBeUndefined();
   });
 
+  it('les alertes ciblées La Centrale « 1 MERCEDES disponible 🚗 » et « 2 nouvelles annonces disponibles 🚗 » sont des nouvelles annonces, avec leur nombre', () => {
+    // Arrange
+    const oneBrand = '1 MERCEDES disponible 🚗';
+    const twoAds = '2 nouvelles annonces disponibles 🚗';
+
+    // Act
+    const kinds = [oneBrand, twoAds].map(classifyEmail);
+    const counts = [oneBrand, twoAds].map(announcedCount);
+
+    // Assert
+    expect(kinds).toEqual(['new', 'new']);
+    expect(counts).toEqual([1, 2]);
+  });
+
   it('les baisses de prix, relances et récapitulatifs reviennent sur des annonces publiées plus tôt, pas les nouvelles annonces', () => {
     // Arrange
     const priceDropsSubject = '↘️ 108 baisses de prix sur votre alerte';
