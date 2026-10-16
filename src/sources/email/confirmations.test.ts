@@ -34,6 +34,12 @@ describe('alert confirmation emails', () => {
     expect(c!.manageUrl).toContain('creationRecherche?idAlerte=8529668');
   });
 
+  it('keeps the ParuVendu account page when the « Modifier votre alerte » link of the email is a javascript: address', () => {
+    const html = PARUVENDU.replace(/href="[^"]*creationRecherche[^"]*"/, 'href="javascript:alert(document.domain)"');
+    const c = detectAlertConfirmation({ from: 'info@paruvendu.fr', subject: 'ParuVendu.fr - Confirmation de la création de votre alerte', html });
+    expect(c!.manageUrl).toBe('https://www.paruvendu.fr/utilisateurparticulierfo/default/accueilCompte/');
+  });
+
   it('reads AutoScout24: the saved search, without criteria in the email', () => {
     const c = detectAlertConfirmation({ from: 'savedsearches@notifications.autoscout24.com', subject: 'Profil de recherche 14/10/2026 : ta recherche a bien été enregistrée', html: AUTOSCOUT });
     expect(c).toMatchObject({ site: 'autoscout24' });

@@ -14,6 +14,7 @@ import { testMailbox } from './sources/email/imap.js';
 import { fetchSite } from './sources/http.js';
 import { siteSetups, targetedSearches } from './sources/links.js';
 import { alertAdvice, alertMismatch, siteLabel } from './sources/email/confirmations.js';
+import { isWebAddress } from './sources/webAddress.js';
 import { FAMILIES, FAMILY_LABELS, type Family, type RawListing, type Settings, type Status } from './types.js';
 
 interface Deps { store: Store; pipeline: Pipeline; notifier: AppNotifier; scheduler: Scheduler; friendlyImapError: (e: unknown) => string }
@@ -201,12 +202,13 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     const digests: Record<string, { at: string | null; announced: number; received: number; url: string | null; subject: string }> = {};
     for (const e of emails) {
       if (!e.site || digests[e.site] || !e.parsed?.announced || e.parsed.kind !== 'new' || e.parsed.announced <= e.parsed_count) continue;
-      digests[e.site] = { at: e.received_at ?? e.processed_at, announced: e.parsed.announced, received: e.parsed_count, url: e.parsed.moreUrl ?? null, subject: e.subject };
+      digests[e.site] = { at: e.received_at ?? e.processed_at, announced: e.parsed.announced, received: e.parsed_count, url: e.parsed.moreUrl && isWebAddress(e.parsed.moreUrl) ? e.parsed.moreUrl : null, subject: e.subject };
     }
     return {
       imap: { host: settings.imap.host, port: settings.imap.port, user: settings.imap.user, hasPassword: Boolean(settings.imap.pass), mailbox: settings.imap.mailbox, configured: Boolean(settings.imap.user && settings.imap.pass), lastRun: runs.find((r) => r.source === 'email') ?? null },
       sites: siteSetups(settings).map((s) => {
-        const alert = settings.alerts[s.key];
+        const stored = settings.alerts[s.key];
+        const alert = stored && { ...stored, manageUrl: stored.manageUrl && isWebAddress(stored.manageUrl) ? stored.manageUrl : undefined };
         return { ...s, done: Boolean(settings.alertsDone[s.key]), alert: alert ?? null, issues: alert ? alertMismatch(alert, settings) : [], advice: alert ? alertAdvice(alert, settings) : null, digest: digests[s.key] ?? null, targeted: targetedSearches(settings, s.key) };
       }),
       httpSites: settings.httpSites.map((s) => ({ ...s, lastRun: runs.find((r) => r.source === `http:${s.id}`) ?? null })),
@@ -269,13 +271,13 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
       const site = String(it.site ?? '').slice(0, 40);
       const url = String(it.url ?? '').slice(0, 1000);
       const title = String(it.title ?? '').trim().slice(0, 300);
-      if (!site || !/^https?:/i.test(url) || !title) { out.skipped++; continue; }
+      if (!site || !isWebAddress(url) || !title) { out.skipped++; continue; }
       const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : undefined; };
       const raw: RawListing = {
         site, siteLabel: String(it.siteLabel ?? siteLabel(site)).slice(0, 60), externalId: String(it.externalId ?? url).slice(0, 300), url, title,
         price: num(it.price), km: num(it.km), year: num(it.year),
         city: it.city ? String(it.city).slice(0, 120) : undefined, postalCode: it.postalCode ? String(it.postalCode).slice(0, 10) : undefined,
-        imageUrl: it.imageUrl && /^https?:/i.test(String(it.imageUrl)) ? String(it.imageUrl).slice(0, 1000) : undefined,
+        imageUrl: it.imageUrl && isWebAddress(String(it.imageUrl)) ? String(it.imageUrl).slice(0, 1000) : undefined,
         description: it.description ? String(it.description).slice(0, 4000) : undefined,
         sellerType: it.sellerType === 'pro' || it.sellerType === 'particulier' ? it.sellerType : undefined,
         publishedAt: it.publishedAt && !Number.isNaN(Date.parse(String(it.publishedAt))) ? new Date(String(it.publishedAt)).toISOString() : undefined,
@@ -378,7 +380,7 @@ function sanitize(next: Settings, current: Settings): Settings | string {
   next.imap.port = Number(next.imap.port) || 993;
   // Confirmations recorded from the mailbox are kept even when a client sends settings loaded before they arrived.
   const alerts = { ...current.alerts, ...(next.alerts ?? {}) };
-  next.alerts = Object.fromEntries(Object.entries(alerts).filter(([, v]) => v && typeof v === 'object' && typeof v.criteria === 'string').map(([k, v]) => [String(k).slice(0, 40), { ...v, site: String(k).slice(0, 40), criteria: String(v.criteria).slice(0, 300), manageUrl: v.manageUrl && /^https?:/i.test(v.manageUrl) ? v.manageUrl.slice(0, 500) : undefined }]));
+  next.alerts = Object.fromEntries(Object.entries(alerts).filter(([, v]) => v && typeof v === 'object' && typeof v.criteria === 'string').map(([k, v]) => [String(k).slice(0, 40), { ...v, site: String(k).slice(0, 40), criteria: String(v.criteria).slice(0, 300), manageUrl: v.manageUrl && isWebAddress(v.manageUrl) ? v.manageUrl.slice(0, 500) : undefined }]));
   next.alertsDone = Object.fromEntries(Object.entries(next.alertsDone ?? {}).filter(([, v]) => v === true).map(([k]) => [String(k).slice(0, 40), true]));
   for (const k of Object.keys(next.alerts)) next.alertsDone[k] = true;
   return next;

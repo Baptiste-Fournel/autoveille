@@ -3,6 +3,7 @@ import type { AnyNode, Element } from 'domhandler';
 import type { RawListing, SellerType } from '../../types.js';
 import { cleanText, parseKm, parseLocation, parsePrice, parseYear } from '../../listings/normalize.js';
 import { listingRef, SITES, siteForHost, siteForSender, unwrapTrackingUrl, type ListingRef, type SiteDef } from '../sites.js';
+import { isWebAddress } from '../webAddress.js';
 
 export interface EmailInput {
   html?: string;
@@ -104,7 +105,7 @@ function parseHtml(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
   let moreUrl: string | undefined;
   $('a[href]').each((_i, el) => {
     const href = ($(el).attr('href') ?? '').trim();
-    if (!/^https?:/i.test(href)) return;
+    if (!isWebAddress(href)) return;
     const { ref, pending } = refFor(href, hint, resolved);
     const text = textOf($, el);
     if (pending) { if (!pendingSet.has(pending)) pendingSet.set(pending, text); return; }
@@ -114,7 +115,7 @@ function parseHtml(input: EmailInput, hint: SiteDef | undefined, resolved: Map<s
       const caption = text || cleanText($(el).find('img').attr('alt') ?? '');
       if (!moreUrl && MORE_TEXT.test(caption)) {
         const final = resolved.get(href) ?? unwrapTrackingUrl(href).url;
-        try { const u = new URL(final); if (!hint || siteForHost(u.hostname)?.key === hint.key) moreUrl = final; } catch { /* lien illisible */ }
+        try { const u = new URL(final); if (isWebAddress(final) && (!hint || siteForHost(u.hostname)?.key === hint.key)) moreUrl = final; } catch { /* lien illisible */ }
       }
       return;
     }
@@ -290,7 +291,7 @@ function pickImage($: cheerio.CheerioAPI, block: AnyNode[], site?: string): stri
     const src = ($(img).attr('src') ?? '').trim();
     const w = Number($(img).attr('width') ?? 0);
     const h = Number($(img).attr('height') ?? 0);
-    if (!/^https?:/i.test(src)) return undefined;
+    if (!isWebAddress(src)) return undefined;
     if ((w && w < 40) || (h && h < 40)) return undefined;
     if (/display\s*:\s*none/i.test($(img).attr('style') ?? '')) return undefined;
     return src;

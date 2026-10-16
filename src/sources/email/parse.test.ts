@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { announcedCount, classifyEmail, parseAlertEmail } from './parse.js';
-import { listingRef, unwrapTrackingUrl } from '../sites.js';
+import { listingRef, resolveRedirect, unwrapTrackingUrl } from '../sites.js';
 
 const LBC_HTML = `
 <html><body>
@@ -199,8 +199,9 @@ describe('La Centrale digest email (real layout)', () => {
     resolved.set(href, ad >= 0 ? `https://www.lacentrale.fr/auto-occasion-annonce-${ads[ad]}.html` : 'https://www.lacentrale.fr/listing?customerFamilyCodes=PART');
   }
 
+  const input = { html: fixture('lacentrale-alerte.html'), from: 'info@mail-alerte.lacentrale.fr', subject: '61 nouveaux véhicules correspondent à votre recherche', date: new Date('2026-10-15T06:36:59Z') };
+
   it('reads the three previewed ads with price, km, seller type and département', () => {
-    const input = { html: fixture('lacentrale-alerte.html'), from: 'info@mail-alerte.lacentrale.fr', subject: '61 nouveaux véhicules correspondent à votre recherche', date: new Date('2026-10-15T06:36:59Z') };
     const first = parseAlertEmail(input);
     expect(first.listings).toHaveLength(0);
     expect(first.pending.length).toBeGreaterThan(30);
@@ -218,6 +219,24 @@ describe('La Centrale digest email (real layout)', () => {
       expect.stringMatching(/^https:\/\/pictures\.lacentrale\.fr\/classifieds\/B104315440_/),
       expect.stringMatching(/^https:\/\/pictures\.lacentrale\.fr\/classifieds\/B104315417_/),
     ]);
+  });
+  it('offers no link to the rest of the list when the click tracker of « voir toutes les annonces » redirects to a javascript: address', () => {
+    const hijacked = new Map([...resolved].map(([href, destination]) => [href, destination.includes('/listing?') ? 'javascript://www.lacentrale.fr/%0aalert(document.domain)' : destination]));
+    const out = parseAlertEmail(input, hijacked);
+    expect(out.listings).toHaveLength(3);
+    expect(out.moreUrl).toBeUndefined();
+  });
+});
+
+describe('click tracker redirects', () => {
+  it('leaves to the HTTP resolution a click tracker whose destination parameter is a javascript: address', () => {
+    const tracker = 'https://click.leboncoin.fr/r?u=' + encodeURIComponent('javascript://www.leboncoin.fr/ad/voitures/2811001234%0aalert(document.domain)');
+    expect(unwrapTrackingUrl(tracker)).toEqual({ url: tracker, resolved: false });
+  });
+
+  it('does not take a javascript: address as the destination of a click tracker', async () => {
+    const tracker = (async () => new Response(null, { status: 302, headers: { location: 'javascript://www.leboncoin.fr/%0aalert(document.domain)' } })) as typeof fetch;
+    expect(await resolveRedirect('https://click.leboncoin.fr/r/abc123', tracker)).toBeUndefined();
   });
 });
 

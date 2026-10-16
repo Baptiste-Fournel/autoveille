@@ -3,6 +3,7 @@ import type { AlertInfo, Settings } from '../../types.js';
 import { cleanText, fmtInt } from '../../listings/normalize.js';
 import { SITES, siteForSender } from '../sites.js';
 import { alertBounds } from '../links.js';
+import { isWebAddress } from '../webAddress.js';
 
 /** What a site confirmed when the person created the alert there. Stored in the settings, shown in the Sites screen. */
 export type AlertConfirmation = AlertInfo;
@@ -65,7 +66,7 @@ export function detectAlertConfirmation(input: Input): AlertConfirmation | undef
       .replace(/\s+(Rayon de)/i, ', $1')
       .replace(/\s+(Jusqu'à)/i, ', $1')
       .replace(/\s*,\s*/g, ', ').trim();
-    const manage = links.find((l) => /modifier votre alerte/i.test(l.text))?.href;
+    const manage = links.find((l) => /modifier votre alerte/i.test(l.text) && isWebAddress(l.href))?.href;
     return { ...base, criteria: criteria || 'Alerte enregistrée', radiusKm, maxKm, postalCode, manageUrl: manage || site.manageUrl };
   }
 

@@ -1,3 +1,5 @@
+import { isWebAddress } from './webAddress.js';
+
 /**
  * Known classified sites: how to recognise a listing link in an alert email, how to extract its id,
  * and how the person sets up the alert. Unknown sites fall back to a generic heuristic.
@@ -140,7 +142,7 @@ export function unwrapTrackingUrl(href: string): { url: string; resolved: boolea
   // 1. A query parameter holding the destination.
   for (const [, v] of u.searchParams) {
     const candidate = tryUrl(v) ?? tryUrl(safeDecode(v));
-    if (candidate && siteForHost(candidate.hostname)) return { url: candidate.toString(), resolved: true };
+    if (candidate && isWebAddress(candidate.toString()) && siteForHost(candidate.hostname)) return { url: candidate.toString(), resolved: true };
   }
   // 2. The destination inlined in the path ("/click/https://www.leboncoin.fr/...").
   const inline = /https?:\/\/[^\s"'<>]+/i.exec(safeDecode(u.pathname + u.search));
@@ -171,6 +173,7 @@ export async function resolveRedirect(href: string, fetchImpl: typeof fetch = fe
       const loc = res.headers.get('location');
       if (res.status >= 300 && res.status < 400 && loc) {
         current = new URL(loc, current).toString();
+        if (!isWebAddress(current)) return undefined;
         if (siteForHost(new URL(current).hostname)) return current;
         continue;
       }
