@@ -1,5 +1,5 @@
 import type { Verdict } from '../../domain/filtering/verdict.js';
-import { type Created, decideIngest, type IngestDecision, type PriceChanged } from '../../domain/ingest/decide.js';
+import { type Created, decideIngest, type IngestDecision, type LeftAside, type PriceChanged } from '../../domain/ingest/decide.js';
 import { type Attachment, type Identification, sameVehicleAmong } from '../../domain/ingest/identify.js';
 import { notificationFor } from '../../domain/ingest/notifications.js';
 import { extractionContextAt } from '../../domain/parsing/extractionContext.js';
@@ -10,7 +10,7 @@ import { fingerprint } from '../../domain/vehicle/identity.js';
 import type { PricePoint, RawListing, VehicleInfo } from '../../domain/vehicle/types.js';
 import { notifyNewVehicle } from '../notifications/notifyNewVehicle.js';
 import { notifyPriceDrop } from '../notifications/notifyPriceDrop.js';
-import type { NotificationDependencies } from '../notifications/sendToChannels.js';
+import type { Delivery, NotificationDependencies } from '../notifications/sendToChannels.js';
 import type { Clock } from '../ports/clock.js';
 import type { Geocoder } from '../ports/geocoder.js';
 import type { Transaction } from '../ports/transaction.js';
@@ -28,13 +28,15 @@ export interface ListingToIngest {
   readonly listing: RawListing;
   readonly settings: Settings;
   readonly notify: boolean;
+  readonly aboutOlderAds: boolean;
 }
 
 export type IngestOutcome =
   | { readonly kind: 'created'; readonly vehicleId: number; readonly verdict: Verdict }
   | { readonly kind: 'priceChanged'; readonly vehicleId: number; readonly from: number; readonly to: number }
   | { readonly kind: 'seenAgain'; readonly vehicleId: number }
-  | { readonly kind: 'attachedToVehicle'; readonly vehicleId: number; readonly attachment: Attachment };
+  | { readonly kind: 'attachedToVehicle'; readonly vehicleId: number; readonly attachment: Attachment }
+  | { readonly kind: 'leftAside' };
 
 const identify = async (
   dependencies: IngestDependencies,
@@ -59,7 +61,9 @@ const addFirstPricePoint = (vehicles: VehicleRepository, listingId: number, pric
   }
 };
 
-const applied = (vehicles: VehicleRepository, decision: IngestDecision): number => {
+type AppliedDecision = Exclude<IngestDecision, LeftAside>;
+
+const applied = (vehicles: VehicleRepository, decision: AppliedDecision): number => {
   switch (decision.kind) {
     case 'priceChanged':
       vehicles.addPricePoint(decision.listingId, decision.pricePoint);
@@ -92,10 +96,17 @@ const recordFailure = (dependencies: IngestDependencies, vehicleId: number, erro
   dependencies.vehicles.addEvent(vehicleId, { type: EVENT_TYPES.notificationFailed, detail: String(error), at: dependencies.clock.now() });
 };
 
+const recordFailures = (dependencies: IngestDependencies, vehicleId: number, delivery: Delivery): void => {
+  for (const failure of delivery.failures) {
+    recordFailure(dependencies, vehicleId, failure);
+  }
+};
+
 const announceNewVehicle = async (dependencies: IngestDependencies, decision: Created, vehicleId: number): Promise<void> => {
   try {
-    await notifyNewVehicle(dependencies, { vehicle: { id: vehicleId, ...decision.vehicle }, listing: decision.listing });
+    const delivery = await notifyNewVehicle(dependencies, { vehicle: { id: vehicleId, ...decision.vehicle }, listing: decision.listing });
     dependencies.vehicles.markNotified(vehicleId, dependencies.clock.now());
+    recordFailures(dependencies, vehicleId, delivery);
   } catch (error) {
     recordFailure(dependencies, vehicleId, error);
   }
@@ -103,13 +114,19 @@ const announceNewVehicle = async (dependencies: IngestDependencies, decision: Cr
 
 const announcePriceDrop = async (dependencies: IngestDependencies, decision: PriceChanged): Promise<void> => {
   try {
-    await notifyPriceDrop(dependencies, { vehicle: decision.vehicle, listing: decision.listing, from: decision.from, to: decision.to });
+    const delivery = await notifyPriceDrop(dependencies, {
+      vehicle: decision.vehicle,
+      listing: decision.listing,
+      from: decision.from,
+      to: decision.to,
+    });
+    recordFailures(dependencies, decision.vehicleId, delivery);
   } catch (error) {
     recordFailure(dependencies, decision.vehicleId, error);
   }
 };
 
-const announce = async (dependencies: IngestDependencies, decision: IngestDecision, vehicleId: number): Promise<void> => {
+const announce = async (dependencies: IngestDependencies, decision: AppliedDecision, vehicleId: number): Promise<void> => {
   const notification = notificationFor(decision);
   if (decision.kind === 'created' && notification === 'newVehicle') {
     await announceNewVehicle(dependencies, decision, vehicleId);
@@ -119,7 +136,7 @@ const announce = async (dependencies: IngestDependencies, decision: IngestDecisi
   }
 };
 
-const outcomeOf = (decision: IngestDecision, vehicleId: number): IngestOutcome => {
+const outcomeOf = (decision: AppliedDecision, vehicleId: number): IngestOutcome => {
   switch (decision.kind) {
     case 'created':
       return { kind: 'created', vehicleId, verdict: decision.verdict };
@@ -133,11 +150,14 @@ const outcomeOf = (decision: IngestDecision, vehicleId: number): IngestOutcome =
 };
 
 export async function ingestListing(dependencies: IngestDependencies, request: ListingToIngest): Promise<IngestOutcome> {
-  const { listing, settings } = request;
+  const { listing, settings, aboutOlderAds } = request;
   const now = dependencies.clock.now();
   const info = extractVehicleInfo(listing, extractionContextAt(settings, now));
   const identification = await identify(dependencies, listing, info, settings);
-  const decision = decideIngest({ listing, info, settings, identification, now });
+  const decision = decideIngest({ listing, info, settings, identification, now, aboutOlderAds });
+  if (decision.kind === 'leftAside') {
+    return { kind: 'leftAside' };
+  }
   const vehicleId = dependencies.transaction.run(() => applied(dependencies.vehicles, decision));
   if (request.notify) {
     await announce(dependencies, decision, vehicleId);

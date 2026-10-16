@@ -150,6 +150,7 @@ describe('lecture de la boîte mail', () => {
           ignored: 4,
           announced: 1,
           kind: 'new',
+          leftAside: 0,
         },
         error: null,
         processedAt: '2026-10-15T08:30:00.000Z',
@@ -157,11 +158,57 @@ describe('lecture de la boîte mail', () => {
     ]);
   });
 
-  it('une annonce ParuVendu sans date prend celle de l’email d’alerte ; celle d’un email La Centrale de baisses de prix reste sans date', async () => {
+  it('un email La Centrale de baisses de prix : la Mercedes déjà connue prend son nouveau prix, la Porsche inconnue est laissée de côté, et l’écran Sites le voit', async () => {
+    // Given
+    const world = mailWorld([
+      laCentraleAlert(
+        40,
+        '2026-10-14T07:05:52.000Z',
+        '2 nouveaux véhicules correspondent à votre recherche',
+        adsRead('lacentrale', [MERCEDES_C63]),
+      ),
+      laCentraleAlert(
+        44,
+        '2026-10-15T07:05:52.000Z',
+        '↘️ 2 baisses de prix sur votre alerte',
+        adsRead('lacentrale', [{ ...MERCEDES_C63, price: 59900 }, PORSCHE_997_PRO]),
+      ),
+    ]);
+
+    // When
+    await pollMailbox(world);
+
+    // Then
+    const mercedes = world.vehicles.findListing(MERCEDES_C63.site, MERCEDES_C63.externalId);
+    expect(mercedes?.vehicle.price).toBe(59900);
+    expect(mercedes?.vehicle.priceDropped).toBe(true);
+    expect(world.vehicles.findListing(PORSCHE_997_PRO.site, PORSCHE_997_PRO.externalId)).toBeUndefined();
+    expect(world.vehicles.allVehicles()).toHaveLength(1);
+    expect(world.mailboxState.recentlyProcessed(10).find((email) => email.uid === 44)?.summary).toMatchObject({
+      kind: 'price_drop',
+      leftAside: 1,
+    });
+    expect(world.logger.messages()).toContain(
+      'La Centrale : 1 annonce(s) d’un email de baisse de prix ou de relance laissée(s) de côté, jamais vue(s) comme nouveauté',
+    );
+  });
+
+  it('une annonce ParuVendu sans date prend celle de l’email d’alerte ; une annonce La Centrale connue, revue dans un email de baisses de prix, garde la sienne', async () => {
     // Given
     const world = mailWorld([
       paruVenduAlert(43, '2026-10-15T06:02:17.000Z', [FERRARI_360]),
-      laCentraleAlert(44, '2026-10-15T07:05:52.000Z', '↘️ 3 baisses de prix sur votre alerte', adsRead('lacentrale', [MERCEDES_C63])),
+      laCentraleAlert(
+        40,
+        '2026-10-14T07:05:52.000Z',
+        '2 nouveaux véhicules correspondent à votre recherche',
+        adsRead('lacentrale', [MERCEDES_C63]),
+      ),
+      laCentraleAlert(
+        44,
+        '2026-10-15T07:05:52.000Z',
+        '↘️ 3 baisses de prix sur votre alerte',
+        adsRead('lacentrale', [{ ...MERCEDES_C63, price: 59900 }]),
+      ),
     ]);
 
     // When
@@ -172,8 +219,9 @@ describe('lecture de la boîte mail', () => {
     const mercedes = world.vehicles.findListing(MERCEDES_C63.site, MERCEDES_C63.externalId);
     expect(ferrari?.listing.publishedAt).toBe('2026-10-15T06:02:17.000Z');
     expect(ferrari?.vehicle.publishedAt).toBe('2026-10-15T06:02:17.000Z');
-    expect(mercedes?.listing.publishedAt).toBeNull();
-    expect(mercedes?.vehicle.publishedAt).toBeNull();
+    expect(mercedes?.listing.publishedAt).toBe('2026-10-14T07:05:52.000Z');
+    expect(mercedes?.vehicle.publishedAt).toBe('2026-10-14T07:05:52.000Z');
+    expect(mercedes?.vehicle.price).toBe(59900);
   });
 
   it('première lecture d’une boîte qui garde deux semaines d’alertes : seuls les emails des trois derniers jours sont lus', async () => {

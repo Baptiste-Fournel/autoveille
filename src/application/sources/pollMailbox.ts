@@ -6,6 +6,7 @@ import {
   type MailboxPassCounts,
   mailboxPassDetail,
   mailboxPassLog,
+  olderAdsLeftAsideLog,
   truncatedDigestNotificationFailedLog,
   truncatedEmailLog,
 } from '../../domain/presentation/mailbox.js';
@@ -14,7 +15,13 @@ import { isMailboxReadable } from '../../domain/settings/mailboxConfigured.js';
 import type { MailboxSettings } from '../../domain/settings/types.js';
 import { siteForSender, siteLabel } from '../../domain/sites/catalog.js';
 import { detectAlertConfirmation } from '../../domain/sites/confirmations.js';
-import { announcedCount, classifyEmail, type EmailKind, publicationDateFromEmail } from '../../domain/sites/emailKind.js';
+import {
+  announcedCount,
+  classifyEmail,
+  type EmailKind,
+  isDigestOfOlderAds,
+  publicationDateFromEmail,
+} from '../../domain/sites/emailKind.js';
 import { notifiesTruncatedDigest, type TruncatedNewAdsDigest, truncatedNewAdsDigest } from '../../domain/sites/truncatedDigest.js';
 import { daysBefore } from '../../domain/time/daysBefore.js';
 import type { IngestDependencies } from '../ingest/ingestListing.js';
@@ -117,7 +124,7 @@ const announceTruncatedDigest = async (
   }
 };
 
-const summaryOf = (reading: EmailReading, subjectReading: SubjectReading): EmailReadingSummary => ({
+const summaryOf = (reading: EmailReading, subjectReading: SubjectReading, leftAside: number): EmailReadingSummary => ({
   listings: reading.listings.map(({ title, price, km, year, city, postalCode, sellerType, url }) => ({
     title,
     price,
@@ -133,6 +140,7 @@ const summaryOf = (reading: EmailReading, subjectReading: SubjectReading): Email
   announced: subjectReading.announced,
   kind: subjectReading.kind,
   moreUrl: reading.moreUrl,
+  leftAside,
 });
 
 const readEmail = async (
@@ -156,10 +164,14 @@ const readEmail = async (
   const digest = truncatedNewAdsDigest({ site: reading.site, ...subjectReading, received: reading.listings.length });
   await announceTruncatedDigest(dependencies, digest, reading.moreUrl);
   const publishedAt = publicationDateFromEmail(email.subject, email.date);
-  const matched = await ingestInTurn(
+  const ingested = await ingestInTurn(
     dependencies,
     reading.listings.map((listing) => ({ ...listing, publishedAt })),
+    isDigestOfOlderAds(email.subject),
   );
+  if (ingested.leftAside > 0) {
+    dependencies.logger.info(olderAdsLeftAsideLog(siteLabel(reading.site ?? ''), ingested.leftAside));
+  }
   dependencies.mailboxState.recordProcessed({
     messageId,
     uid,
@@ -168,11 +180,11 @@ const readEmail = async (
     receivedAt: email.date ?? null,
     site: reading.site ?? null,
     listingCount: reading.listings.length,
-    summary: summaryOf(reading, subjectReading),
+    summary: summaryOf(reading, subjectReading, ingested.leftAside),
     error: null,
     processedAt: dependencies.clock.now(),
   });
-  return { kind: 'read', listings: reading.listings.length, matched };
+  return { kind: 'read', listings: reading.listings.length, matched: ingested.newMatchedVehicles };
 };
 
 const processEmail = async (dependencies: PollMailboxDependencies, session: MailboxSession, uid: number): Promise<EmailOutcome> => {

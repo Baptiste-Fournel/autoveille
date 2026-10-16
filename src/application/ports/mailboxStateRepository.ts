@@ -19,6 +19,7 @@ export interface EmailReadingSummary {
   readonly announced?: number;
   readonly kind?: EmailKind;
   readonly moreUrl?: string;
+  readonly leftAside?: number;
 }
 
 export interface ProcessedEmail {

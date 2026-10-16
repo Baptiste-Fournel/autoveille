@@ -44,7 +44,12 @@ describe('données de démonstration (DEMO=1)', () => {
     // Given
     const application = await demoApplication();
     const { ports } = application;
-    await ingestListing(ports, { listing: PORSCHE_944_SEEN_LAST_WEEK, settings: ports.settings.load(), notify: false });
+    await ingestListing(ports, {
+      listing: PORSCHE_944_SEEN_LAST_WEEK,
+      settings: ports.settings.load(),
+      notify: false,
+      aboutOlderAds: false,
+    });
     application.clock.advanceBy(7 * 86_400_000);
 
     // When

@@ -398,7 +398,7 @@ describe('vérifier maintenant et tout relire', () => {
     const { application, session } = await signedInApplication({ imapClient: imap.createClient });
     const { ports } = application;
     await application.server.inject({ method: 'PUT', url: '/api/settings', headers: session, payload: { imap: DEALER_MAILBOX } });
-    await ingestListing(ports, { listing: PARUVENDU_AUDI_TT, settings: ports.settings.load(), notify: false });
+    await ingestListing(ports, { listing: PARUVENDU_AUDI_TT, settings: ports.settings.load(), notify: false, aboutOlderAds: false });
     ports.mailboxState.recordProcessed({
       messageId: '<alerte-une-nouvelle-annonce@paruvendu.fr>',
       uid: 12,

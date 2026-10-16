@@ -1,4 +1,4 @@
-import type { DeliveryFailed, NotificationChannel, PushNotification } from '../ports/notificationChannel.js';
+import type { NotificationChannel, PushNotification } from '../ports/notificationChannel.js';
 import type { PushSubscription, PushSubscriptionRepository } from '../ports/pushSubscriptionRepository.js';
 
 export interface PushDependencies {
@@ -6,34 +6,34 @@ export interface PushDependencies {
   readonly channel: NotificationChannel;
 }
 
-export interface PushRoundCompleted {
-  readonly kind: 'completed';
+export interface PushRound {
   readonly sent: number;
+  readonly failures: readonly Error[];
 }
 
-export type PushRound = PushRoundCompleted | DeliveryFailed;
+const NOTHING_SENT: PushRound = { sent: 0, failures: [] };
 
 const pushInTurn = async (
   dependencies: PushDependencies,
   remaining: readonly PushSubscription[],
   notification: PushNotification,
-  sent: number,
+  round: PushRound,
 ): Promise<PushRound> => {
   const [subscription, ...others] = remaining;
   if (subscription === undefined) {
-    return { kind: 'completed', sent };
+    return round;
   }
   const outcome = await dependencies.channel.push(subscription, notification);
   switch (outcome.kind) {
     case 'delivered':
-      return pushInTurn(dependencies, others, notification, sent + 1);
+      return pushInTurn(dependencies, others, notification, { ...round, sent: round.sent + 1 });
     case 'subscriptionGone':
       dependencies.subscriptions.remove(subscription.endpoint);
-      return pushInTurn(dependencies, others, notification, sent);
+      return pushInTurn(dependencies, others, notification, round);
     case 'failed':
-      return outcome;
+      return pushInTurn(dependencies, others, notification, { ...round, failures: [...round.failures, outcome.error] });
   }
 };
 
 export const pushToSubscribers = (dependencies: PushDependencies, notification: PushNotification): Promise<PushRound> =>
-  pushInTurn(dependencies, dependencies.subscriptions.all(), notification, 0);
+  pushInTurn(dependencies, dependencies.subscriptions.all(), notification, NOTHING_SENT);

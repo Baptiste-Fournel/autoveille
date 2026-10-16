@@ -173,7 +173,10 @@ function sessionOf(response: LightMyRequestResponse): { readonly cookie: string 
 
 async function received(application: ComposedApplication, listing: RawListing): Promise<number> {
   const { ports } = application;
-  const outcome = await ingestListing(ports, { listing, settings: ports.settings.load(), notify: false });
+  const outcome = await ingestListing(ports, { listing, settings: ports.settings.load(), notify: false, aboutOlderAds: false });
+  if (outcome.kind === 'leftAside') {
+    throw new Error(`annonce ${listing.externalId} laissée de côté`);
+  }
   return outcome.vehicleId;
 }
 

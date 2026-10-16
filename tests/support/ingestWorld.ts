@@ -76,5 +76,15 @@ export const ingestWorld = (options: IngestWorldOptions = {}): IngestWorld => {
   };
 };
 
-export const ingest = (world: IngestWorld, listing: RawListing): Promise<IngestOutcome> =>
-  ingestListing(world.dependencies, { listing, settings: world.settings.load(), notify: true });
+export type StoredOutcome = Exclude<IngestOutcome, { readonly kind: 'leftAside' }>;
+
+export const ingest = async (world: IngestWorld, listing: RawListing, aboutOlderAds = false): Promise<StoredOutcome> => {
+  const outcome = await ingestListing(world.dependencies, { listing, settings: world.settings.load(), notify: true, aboutOlderAds });
+  if (outcome.kind === 'leftAside') {
+    throw new Error(`annonce ${listing.externalId} laissée de côté`);
+  }
+  return outcome;
+};
+
+export const ingestFromOlderAdsEmail = (world: IngestWorld, listing: RawListing): Promise<IngestOutcome> =>
+  ingestListing(world.dependencies, { listing, settings: world.settings.load(), notify: true, aboutOlderAds: true });

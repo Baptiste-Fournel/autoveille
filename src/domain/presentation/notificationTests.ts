@@ -6,6 +6,9 @@ export const NO_SUBSCRIBED_DEVICE = 'Aucun appareil abonné : activez les notifi
 
 export const testPushSentText = (devices: number): string => `Notification envoyée à ${devices} appareil(s).`;
 
+export const partlySentText = (devices: number, failed: number, reason: string): string =>
+  `Notification envoyée à ${devices} appareil(s) ; ${failed} appareil(s) en échec : ${reason}`;
+
 export const TELEGRAM_CHAT_MISSING = 'Renseignez le jeton du bot et l’identifiant de conversation.';
 
 export const TEST_TELEGRAM_TEXT = 'AutoVeille : les notifications Telegram fonctionnent.';

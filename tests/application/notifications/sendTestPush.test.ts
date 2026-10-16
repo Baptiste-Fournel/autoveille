@@ -90,7 +90,7 @@ describe('essai des notifications', () => {
     expect(subscriptions.all()).toEqual([]);
   });
 
-  it('un service push qui refuse l’envoi arrête l’essai et en donne la raison', async () => {
+  it('le service push refuse l’envoi au téléphone : l’ordinateur reçoit l’essai, et le résultat dit l’appareil en échec et la raison', async () => {
     // Given
     const { dependencies, notifications, subscriptions } = pushTest([PHONE, LAPTOP], {
       failingEndpoints: { [PHONE.endpoint]: new Error('Received unexpected response code') },
@@ -100,8 +100,25 @@ describe('essai des notifications', () => {
     const result = await sendTestPush(dependencies);
 
     // Then
+    expect(result).toEqual({
+      ok: true,
+      detail: 'Notification envoyée à 1 appareil(s) ; 1 appareil(s) en échec : Received unexpected response code',
+    });
+    expect(notifications.pushes().map((sent) => sent.endpoint)).toEqual([LAPTOP.endpoint]);
+    expect(subscriptions.all()).toEqual([PHONE, LAPTOP]);
+  });
+
+  it('le service push refuse l’envoi au seul appareil abonné : l’essai échoue et en donne la raison', async () => {
+    // Given
+    const { dependencies, notifications } = pushTest([PHONE], {
+      failingEndpoints: { [PHONE.endpoint]: new Error('Received unexpected response code') },
+    });
+
+    // When
+    const result = await sendTestPush(dependencies);
+
+    // Then
     expect(result).toEqual({ ok: false, detail: 'Envoi impossible : Received unexpected response code' });
     expect(notifications.pushes()).toEqual([]);
-    expect(subscriptions.all()).toEqual([PHONE, LAPTOP]);
   });
 });

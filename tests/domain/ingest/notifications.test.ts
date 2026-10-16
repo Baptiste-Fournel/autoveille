@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { IngestDecision } from '../../../src/domain/ingest/decide.js';
 import { notificationFor } from '../../../src/domain/ingest/notifications.js';
 import type { Vehicle } from '../../../src/domain/vehicle/types.js';
-import { decide } from '../../support/ingestion.js';
+import { decide, NOW } from '../../support/ingestion.js';
 import { knownListing, knownVehicle, LEBONCOIN_911_TITLE, leboncoinListing as leboncoin, PESSAC } from '../../support/knownVehicle.js';
 
 const priceDropOn = (vehicle: Partial<Vehicle>): IngestDecision =>
@@ -104,6 +104,18 @@ describe('ce que notifie une annonce reçue', () => {
 
     // Then
     expect(decision.kind).toBe('priceChanged');
+    expect(notification).toBeUndefined();
+  });
+
+  it('une annonce inconnue laissée de côté parce qu’elle vient d’un email de baisses de prix ne notifie pas', () => {
+    // Given
+    const decision = decide(leboncoin(LEBONCOIN_911_TITLE), { kind: 'newVehicle', location: PESSAC }, NOW, true);
+
+    // When
+    const notification = notificationFor(decision);
+
+    // Then
+    expect(decision.kind).toBe('leftAside');
     expect(notification).toBeUndefined();
   });
 

@@ -38,7 +38,7 @@ describe('maintenance', () => {
     const { application, session } = await signedInApplication();
     const { ports } = application;
     for (const listing of RECEIVED_THIS_MORNING) {
-      await ingestListing(ports, { listing, settings: ports.settings.load(), notify: false });
+      await ingestListing(ports, { listing, settings: ports.settings.load(), notify: false, aboutOlderAds: false });
     }
 
     // When

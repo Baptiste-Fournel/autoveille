@@ -69,7 +69,7 @@ describe('écran Messages : aperçu d’un gabarit', () => {
     // Given
     const { application, session } = await signedInApplication();
     const { ports } = application;
-    await ingestListing(ports, { listing: PORSCHE_911_RECEIVED, settings: ports.settings.load(), notify: false });
+    await ingestListing(ports, { listing: PORSCHE_911_RECEIVED, settings: ports.settings.load(), notify: false, aboutOlderAds: false });
     const vehicleId = ports.vehicles.findListing(PORSCHE_911_RECEIVED.site, PORSCHE_911_RECEIVED.externalId)?.vehicle.id;
 
     // When

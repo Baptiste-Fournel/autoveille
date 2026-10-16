@@ -14,6 +14,7 @@ export function notificationFor(decision: IngestDecision): IngestNotification | 
       return decision.to < decision.from && notifiesPriceDrop(decision.vehicle) ? 'priceDrop' : undefined;
     case 'seenAgain':
     case 'attachedToVehicle':
+    case 'leftAside':
       return undefined;
   }
 }

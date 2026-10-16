@@ -157,7 +157,7 @@ export const hasNoRecentVehicle = ({ vehicles, clock }: Pick<IngestDependencies,
   vehicles.vehiclesFirstSeenSince(daysBefore(clock.now(), RECENT_DAYS)).length === 0;
 
 const ingestQuietly = async (dependencies: IngestDependencies, settings: Settings, listing: RawListing): Promise<void> => {
-  await ingestListing(dependencies, { listing, settings, notify: false });
+  await ingestListing(dependencies, { listing, settings, notify: false, aboutOlderAds: false });
 };
 
 export async function seedDemo(dependencies: IngestDependencies): Promise<void> {

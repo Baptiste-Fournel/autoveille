@@ -279,7 +279,8 @@ const vehicleIdIn = (application: Application, site: string, externalId: string)
 
 async function populate(application: Application, clock: SteppingClock): Promise<void> {
   const { ports } = application;
-  const ingest = (listing: RawListing) => ingestListing(ports, { listing, settings: ports.settings.load(), notify: true });
+  const ingest = (listing: RawListing) =>
+    ingestListing(ports, { listing, settings: ports.settings.load(), notify: true, aboutOlderAds: false });
   await ingest(CONTACTED_LAST_WEEK);
   const contactedLastWeek = vehicleIdIn(application, CONTACTED_LAST_WEEK.site, CONTACTED_LAST_WEEK.externalId);
   updateVehicle(ports, contactedLastWeek, { status: 'contacte' });

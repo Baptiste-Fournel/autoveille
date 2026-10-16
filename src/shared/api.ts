@@ -349,6 +349,7 @@ export interface EmailReadingDto {
   readonly announced?: number;
   readonly kind?: EmailKind;
   readonly moreUrl?: string;
+  readonly leftAside?: number;
 }
 
 export interface ProcessedEmailDto {

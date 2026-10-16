@@ -50,7 +50,7 @@ const imported = async (
     return 'skipped';
   }
   try {
-    const outcome = await ingestListing(dependencies, { listing, settings, notify });
+    const outcome = await ingestListing(dependencies, { listing, settings, notify, aboutOlderAds: false });
     if (outcome.kind !== 'created') {
       return 'seen';
     }

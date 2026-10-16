@@ -22,6 +22,7 @@ export interface IngestInput {
   readonly settings: Settings;
   readonly identification: Identification;
   readonly now: string;
+  readonly aboutOlderAds: boolean;
 }
 
 export interface PriceChanged {
@@ -67,7 +68,12 @@ export interface Created {
   readonly event: NewVehicleEvent;
 }
 
-export type IngestDecision = PriceChanged | SeenAgain | AttachedToVehicle | Created;
+export interface LeftAside {
+  readonly kind: 'leftAside';
+  readonly listing: RawListing;
+}
+
+export type IngestDecision = PriceChanged | SeenAgain | AttachedToVehicle | Created | LeftAside;
 
 const completedFromTitle = (raw: RawListing, info: VehicleInfo): RawListing => ({
   ...raw,
@@ -209,6 +215,6 @@ export function decideIngest(input: IngestInput): IngestDecision {
     case 'knownVehicle':
       return attachedToVehicle(input, completed, identification.vehicle, identification.listings);
     case 'newVehicle':
-      return created(input, completed, identification.location);
+      return input.aboutOlderAds ? { kind: 'leftAside', listing: completed } : created(input, completed, identification.location);
   }
 }

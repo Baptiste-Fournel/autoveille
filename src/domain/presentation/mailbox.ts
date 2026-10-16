@@ -32,6 +32,9 @@ export const truncatedEmailLog = (siteName: string, announced: number, received:
 
 export const truncatedDigestNotificationFailedLog = (error: string): string => `notification résumé tronqué : ${error}`;
 
+export const olderAdsLeftAsideLog = (siteName: string, count: number): string =>
+  `${siteName} : ${count} annonce(s) d’un email de baisse de prix ou de relance laissée(s) de côté, jamais vue(s) comme nouveauté`;
+
 export const mailboxPassLog = (detail: string): string => `email: ${detail}`;
 
 export const MAILBOX_WATCH_CLOSED = 'connexion fermée';

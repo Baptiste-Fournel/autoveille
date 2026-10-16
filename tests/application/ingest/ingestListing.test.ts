@@ -5,7 +5,7 @@ import { describeRejection } from '../../../src/domain/presentation/reasons.js';
 import { defaultSettings } from '../../../src/domain/settings/defaults.js';
 import type { Vehicle } from '../../../src/domain/vehicle/types.js';
 import { FAKE_NOW } from '../../fakes/fakeClock.js';
-import { DEALER_PHONE, type IngestWorld, ingest, ingestWorld, PUBLIC_ADDRESS } from '../../support/ingestWorld.js';
+import { DEALER_PHONE, type IngestWorld, ingest, ingestFromOlderAdsEmail, ingestWorld, PUBLIC_ADDRESS } from '../../support/ingestWorld.js';
 import { LEBONCOIN_911_TITLE, leboncoinListing } from '../../support/knownVehicle.js';
 import { withGarageTelegram } from '../../support/telegramSettings.js';
 
@@ -92,6 +92,34 @@ describe('ingestion d’une annonce', () => {
       ['prix_baisse', '89900 → 84900', FAKE_NOW],
       ['nouveau', 'Leboncoin', FAKE_NOW],
     ]);
+  });
+
+  it('un email La Centrale de baisses de prix : la 911 connue prend son nouveau prix, la BMW Série 2 inconnue n’est ni enregistrée ni notifiée', async () => {
+    // Given
+    const world = ingestWorld();
+    await ingest(world, porsche911);
+    const unknownBmw = {
+      ...porsche911,
+      site: 'lacentrale',
+      siteLabel: 'La Centrale',
+      externalId: '69115740011',
+      url: 'https://www.lacentrale.fr/auto-occasion-annonce-69115740011.html',
+      title: 'BMW SERIE 2',
+      price: 62900,
+      km: 45000,
+      year: 2019,
+    };
+
+    // When
+    const known = await ingestFromOlderAdsEmail(world, { ...porsche911, price: 84900 });
+    const unknown = await ingestFromOlderAdsEmail(world, unknownBmw);
+
+    // Then
+    expect(known).toMatchObject({ kind: 'priceChanged', from: 89900, to: 84900 });
+    expect(unknown).toEqual({ kind: 'leftAside' });
+    expect(world.vehicles.allVehicles()).toHaveLength(1);
+    expect(world.vehicles.findListing('lacentrale', '69115740011')).toBeUndefined();
+    expect(pushedTitles(world)).toEqual(['Nouvelle annonce : Porsche 911 Carrera S', 'Prix baissé : Porsche 911 Carrera S']);
   });
 
   it('une 911 contactée, republiée sous un nouvel id sur Leboncoin, reste la même voiture, contactée, avec l’étiquette « Republiée »', async () => {
@@ -207,7 +235,7 @@ describe('ingestion d’une annonce', () => {
 });
 
 describe('ingestion d’une annonce : une notification qui échoue', () => {
-  it('le bot Telegram de la concession a été révoqué : l’échec est noté dans l’historique de la 911, qui est enregistrée et reste à notifier', async () => {
+  it('le bot Telegram de la concession a été révoqué : le téléphone reçoit la 911, qui est marquée notifiée, et l’échec Telegram est noté dans son historique', async () => {
     // Given
     const world = ingestWorld({
       settings: withGarageTelegram(),
@@ -219,7 +247,8 @@ describe('ingestion d’une annonce : une notification qui échoue', () => {
 
     // Then
     expect(outcome).toMatchObject({ kind: 'created', verdict: { pass: true } });
-    expect(stored(world, 1).notifiedAt).toBeNull();
+    expect(stored(world, 1).notifiedAt).toBe(FAKE_NOW);
+    expect(pushedTitles(world)).toEqual(['Nouvelle annonce : Porsche 911 Carrera S']);
     expect(world.vehicles.events(1)).toContainEqual(
       expect.objectContaining({
         type: 'notification_echec',
@@ -235,7 +264,7 @@ describe('ingestion d’une annonce : une notification qui échoue', () => {
     const world = ingestWorld({
       channel: { failingEndpoints: { [DEALER_PHONE.endpoint]: new Error('Received unexpected response code') } },
     });
-    await ingestListing(world.dependencies, { listing: porsche911, settings: world.settings.load(), notify: false });
+    await ingestListing(world.dependencies, { listing: porsche911, settings: world.settings.load(), notify: false, aboutOlderAds: false });
 
     // When
     const outcome = await ingest(world, { ...porsche911, price: 84900 });

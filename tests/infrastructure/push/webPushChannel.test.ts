@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import webpush from 'web-push';
 import { pushToSubscribers } from '../../../src/application/notifications/pushToSubscribers.js';
 import type { PushNotification } from '../../../src/application/ports/notificationChannel.js';
+import { vapidSubject } from '../../../src/infrastructure/push/vapidSubject.js';
 import { type WebPushClient, webPushChannel } from '../../../src/infrastructure/push/webPushChannel.js';
 import { fakeNotificationChannel } from '../../fakes/fakeNotificationChannel.js';
 import { FAKE_PUSH_KEYS } from '../../fakes/fakePushKeyGenerator.js';
@@ -35,6 +36,10 @@ const pushServiceAnswering = (refusals: Readonly<Record<string, unknown>> = {}):
 const refusedWith = (statusCode: number, body: string, endpoint: string): webpush.WebPushError =>
   new webpush.WebPushError('Received unexpected response code', statusCode, {}, body, endpoint);
 
+const GARAGE_CONTACT = (): string => vapidSubject('contact@garage-du-lac.fr', 'https://veille.garage-du-lac.fr');
+
+const NO_CONTACT = (): string => vapidSubject('', 'https://veille.garage-du-lac.fr');
+
 const NEW_911: PushNotification = {
   title: 'Nouvelle annonce : Porsche 911',
   body: '2019, 42 000 km, 98 500 € • Pessac, à 5 km • Leboncoin',
@@ -48,7 +53,7 @@ describe('envoi des notifications push par web-push', () => {
     const pushService = pushServiceAnswering();
 
     // When
-    const outcome = await webPushChannel(FAKE_PUSH_KEYS, 'contact@garage-du-lac.fr', pushService).push(DEALER_PHONE, NEW_911);
+    const outcome = await webPushChannel(FAKE_PUSH_KEYS, GARAGE_CONTACT, pushService).push(DEALER_PHONE, NEW_911);
 
     // Then
     expect(outcome).toEqual({ kind: 'delivered' });
@@ -68,15 +73,15 @@ describe('envoi des notifications push par web-push', () => {
     ]);
   });
 
-  it('sans adresse de contact (CONTACT_EMAIL vide), l’envoi est signé au nom de https://autoveille.local', async () => {
+  it('sans adresse de contact (CONTACT_EMAIL vide), l’envoi est signé au nom de l’adresse publique de l’application, qu’Apple accepte là où il refusait https://autoveille.local (403 BadJwtToken)', async () => {
     // Given
     const pushService = pushServiceAnswering();
 
     // When
-    await webPushChannel(FAKE_PUSH_KEYS, '', pushService).push(DEALER_PHONE, NEW_911);
+    await webPushChannel(FAKE_PUSH_KEYS, NO_CONTACT, pushService).push(DEALER_TABLET, NEW_911);
 
     // Then
-    expect(pushService.calls()[0]?.options.vapidDetails?.subject).toBe('https://autoveille.local');
+    expect(pushService.calls()[0]?.options.vapidDetails?.subject).toBe('https://veille.garage-du-lac.fr');
   });
 
   it('le téléphone s’est désabonné : le service push répond 410, l’abonnement est déclaré disparu', async () => {
@@ -86,7 +91,7 @@ describe('envoi des notifications push par web-push', () => {
     });
 
     // When
-    const outcome = await webPushChannel(FAKE_PUSH_KEYS, '', pushService).push(DEALER_PHONE, NEW_911);
+    const outcome = await webPushChannel(FAKE_PUSH_KEYS, NO_CONTACT, pushService).push(DEALER_PHONE, NEW_911);
 
     // Then
     expect(outcome).toEqual({ kind: 'subscriptionGone' });
@@ -99,7 +104,7 @@ describe('envoi des notifications push par web-push', () => {
     });
 
     // When
-    const outcome = await webPushChannel(FAKE_PUSH_KEYS, '', pushService).push(DEALER_TABLET, NEW_911);
+    const outcome = await webPushChannel(FAKE_PUSH_KEYS, NO_CONTACT, pushService).push(DEALER_TABLET, NEW_911);
 
     // Then
     expect(outcome).toEqual({ kind: 'subscriptionGone' });
@@ -111,7 +116,7 @@ describe('envoi des notifications push par web-push', () => {
     const pushService = pushServiceAnswering({ [DEALER_TABLET.endpoint]: refusal });
 
     // When
-    const outcome = await webPushChannel(FAKE_PUSH_KEYS, '', pushService).push(DEALER_TABLET, NEW_911);
+    const outcome = await webPushChannel(FAKE_PUSH_KEYS, NO_CONTACT, pushService).push(DEALER_TABLET, NEW_911);
 
     // Then
     expect(outcome).toEqual({ kind: 'failed', error: refusal });
@@ -125,13 +130,13 @@ describe('envoi des notifications push par web-push', () => {
     const pushService = pushServiceAnswering({
       [DEALER_PHONE.endpoint]: refusedWith(410, 'push subscription has unsubscribed or expired.\n', DEALER_PHONE.endpoint),
     });
-    const channel = { ...fakeNotificationChannel(), ...webPushChannel(FAKE_PUSH_KEYS, '', pushService) };
+    const channel = { ...fakeNotificationChannel(), ...webPushChannel(FAKE_PUSH_KEYS, NO_CONTACT, pushService) };
 
     // When
     const round = await pushToSubscribers({ subscriptions, channel }, NEW_911);
 
     // Then
-    expect(round).toEqual({ kind: 'completed', sent: 1 });
+    expect(round).toEqual({ sent: 1, failures: [] });
     expect(subscriptions.all().map((subscription) => subscription.endpoint)).toEqual([DEALER_TABLET.endpoint]);
     expect(pushService.calls().map((call) => call.subscription.endpoint)).toEqual([DEALER_PHONE.endpoint, DEALER_TABLET.endpoint]);
   });
@@ -141,7 +146,7 @@ describe('envoi des notifications push par web-push', () => {
     const withoutKeys = { endpoint: DEALER_PHONE.endpoint };
 
     // When
-    const outcome = await webPushChannel(FAKE_PUSH_KEYS, '', webpush).push(withoutKeys, NEW_911);
+    const outcome = await webPushChannel(FAKE_PUSH_KEYS, NO_CONTACT, webpush).push(withoutKeys, NEW_911);
 
     // Then
     expect(outcome.kind === 'failed' ? outcome.error.message : undefined).toBe(

@@ -15,7 +15,12 @@ export interface NotificationDependencies {
   readonly address: PublicAddressSettings;
 }
 
-export async function sendToChannels(dependencies: NotificationDependencies, messages: NotificationMessages): Promise<void> {
+export interface Delivery {
+  readonly delivered: number;
+  readonly failures: readonly Error[];
+}
+
+export async function sendToChannels(dependencies: NotificationDependencies, messages: NotificationMessages): Promise<Delivery> {
   const { notifications } = dependencies.settings.load();
   const [pushed, telegram] = await Promise.all([
     notifications.push && storedPushKeys(dependencies.secrets) !== undefined ? pushToSubscribers(dependencies, messages.push) : undefined,
@@ -23,10 +28,13 @@ export async function sendToChannels(dependencies: NotificationDependencies, mes
       ? dependencies.channel.telegram({ botToken: notifications.telegramToken, chatId: notifications.telegramChatId }, messages.telegram)
       : undefined,
   ]);
-  if (pushed?.kind === 'failed') {
-    throw pushed.error;
+  const delivery: Delivery = {
+    delivered: (pushed?.sent ?? 0) + (telegram?.kind === 'delivered' ? 1 : 0),
+    failures: [...(pushed?.failures ?? []), ...(telegram?.kind === 'failed' ? [telegram.error] : [])],
+  };
+  const [firstFailure] = delivery.failures;
+  if (delivery.delivered === 0 && firstFailure !== undefined) {
+    throw firstFailure;
   }
-  if (telegram?.kind === 'failed') {
-    throw telegram.error;
-  }
+  return delivery;
 }

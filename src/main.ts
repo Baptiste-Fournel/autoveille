@@ -7,6 +7,7 @@ import { createAttemptLimiter } from './application/auth/attemptLimiter.js';
 import { ensureSecrets } from './application/auth/ensureSecrets.js';
 import { deleteExpiredSessions } from './application/auth/session.js';
 import { hasNoRecentVehicle, seedDemo } from './application/ingest/seedDemo.js';
+import { publicAddress } from './application/notifications/publicAddress.js';
 import type { Clock } from './application/ports/clock.js';
 import type { Logger } from './application/ports/logger.js';
 import type { SettingsRepository } from './application/ports/settingsRepository.js';
@@ -37,6 +38,7 @@ import { SqliteSettingsRepository } from './infrastructure/persistence/sqlite/sq
 import { SqliteSourceRunRepository } from './infrastructure/persistence/sqlite/sqliteSourceRunRepository.js';
 import { sqliteTransaction } from './infrastructure/persistence/sqlite/sqliteTransaction.js';
 import { SqliteVehicleRepository } from './infrastructure/persistence/sqlite/sqliteVehicleRepository.js';
+import { vapidSubject } from './infrastructure/push/vapidSubject.js';
 import { type WebPushClient, webPushChannel } from './infrastructure/push/webPushChannel.js';
 import { webPushKeyGenerator } from './infrastructure/push/webPushKeyGenerator.js';
 import { IntervalScheduler } from './infrastructure/scheduling/intervalScheduler.js';
@@ -112,6 +114,8 @@ export const buildApplication = async <Handle>(environment: ApplicationEnvironme
       mailboxWatch.settingsSaved();
     },
   };
+  const address = { configuredBaseUrl: config.baseUrl, port: config.port };
+  const pushSubject = (): string => vapidSubject(config.contactEmail, publicAddress(secrets, address));
   const ports: ApplicationPorts = {
     vehicles: new SqliteVehicleRepository(database),
     settings,
@@ -125,8 +129,8 @@ export const buildApplication = async <Handle>(environment: ApplicationEnvironme
     clock,
     random: cryptoRandom,
     logger,
-    channel: { ...webPushChannel(pushKeys, config.contactEmail, environment.webPush), ...telegramChannel(environment.fetch) },
-    address: { configuredBaseUrl: config.baseUrl, port: config.port },
+    channel: { ...webPushChannel(pushKeys, pushSubject, environment.webPush), ...telegramChannel(environment.fetch) },
+    address,
     mailboxReader: imapMailboxReader(environment.imapClient),
     ...alertEmailReading(environment),
     siteFetcher: fetchSiteFetcher(environment.fetch, timers),

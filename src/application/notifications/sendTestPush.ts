@@ -1,5 +1,6 @@
 import {
   NO_SUBSCRIBED_DEVICE,
+  partlySentText,
   sendingFailedText,
   TEST_PUSH_BODY,
   TEST_PUSH_TITLE,
@@ -21,8 +22,11 @@ export const sendTestPush = async (dependencies: TestPushDependencies): Promise<
     body: TEST_PUSH_BODY,
     url: `${publicAddress(dependencies.secrets, dependencies.address)}/`,
   });
-  if (round.kind === 'failed') {
-    return { ok: false, detail: sendingFailedText(round.error.message) };
+  const [firstFailure] = round.failures;
+  if (firstFailure !== undefined) {
+    return round.sent > 0
+      ? { ok: true, detail: partlySentText(round.sent, round.failures.length, firstFailure.message) }
+      : { ok: false, detail: sendingFailedText(firstFailure.message) };
   }
   return round.sent > 0 ? { ok: true, detail: testPushSentText(round.sent) } : { ok: false, detail: NO_SUBSCRIBED_DEVICE };
 };

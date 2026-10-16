@@ -35,7 +35,7 @@ const FORD_MUSTANG: RawListing = {
 
 async function received(application: ComposedApplication, listing: RawListing): Promise<void> {
   const { ports } = application;
-  await ingestListing(ports, { listing, settings: ports.settings.load(), notify: false });
+  await ingestListing(ports, { listing, settings: ports.settings.load(), notify: false, aboutOlderAds: false });
 }
 
 async function overviewSeen(application: ComposedApplication, headers: Readonly<Record<string, string>>): Promise<LightMyRequestResponse> {

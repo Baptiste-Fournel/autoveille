@@ -7,7 +7,7 @@ import type { RawListing } from '../../src/domain/vehicle/types.js';
 
 export const NOW = '2026-10-15T08:30:00.000Z';
 
-export const decide = (listing: RawListing, identification: Identification, now = NOW): IngestDecision => {
+export const decide = (listing: RawListing, identification: Identification, now = NOW, aboutOlderAds = false): IngestDecision => {
   const settings = defaultSettings();
   return decideIngest({
     listing,
@@ -15,5 +15,6 @@ export const decide = (listing: RawListing, identification: Identification, now 
     settings,
     identification,
     now,
+    aboutOlderAds,
   });
 };

@@ -90,6 +90,7 @@ const emailReadingDto = (summary: EmailReadingSummary): EmailReadingDto => ({
   announced: summary.announced,
   kind: summary.kind,
   moreUrl: summary.moreUrl,
+  leftAside: summary.leftAside,
 });
 
 const processedEmailDto = (email: ProcessedEmail): ProcessedEmailDto => ({

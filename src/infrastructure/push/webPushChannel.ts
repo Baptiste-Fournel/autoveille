@@ -10,39 +10,34 @@ const PUSH_TIME_TO_LIVE_SECONDS = 3600;
 
 const GONE_SUBSCRIPTION_STATUSES: readonly unknown[] = [404, 410];
 
-const VAPID_SUBJECT_WITHOUT_CONTACT = 'https://autoveille.local';
-
 const isGoneSubscription = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'statusCode' in error && GONE_SUBSCRIPTION_STATUSES.includes(error.statusCode);
 
-const vapidSubject = (contactEmail: string): string => (contactEmail ? `mailto:${contactEmail}` : VAPID_SUBJECT_WITHOUT_CONTACT);
+export type VapidSubject = () => string;
 
-const signedWith = (keys: PushKeyPair | undefined, contactEmail: string): webpush.RequestOptions =>
+const signedWith = (keys: PushKeyPair | undefined, subject: VapidSubject): webpush.RequestOptions =>
   keys === undefined
     ? { TTL: PUSH_TIME_TO_LIVE_SECONDS }
     : {
         TTL: PUSH_TIME_TO_LIVE_SECONDS,
-        vapidDetails: { subject: vapidSubject(contactEmail), publicKey: keys.publicKey, privateKey: keys.privateKey },
+        vapidDetails: { subject: subject(), publicKey: keys.publicKey, privateKey: keys.privateKey },
       };
 
 export const webPushChannel = (
   keys: PushKeyPair | undefined,
-  contactEmail: string,
+  subject: VapidSubject,
   client: WebPushClient,
-): Pick<NotificationChannel, 'push'> => {
-  const options = signedWith(keys, contactEmail);
-  return {
-    push: async (subscription, notification) => {
-      const recipient = {
-        endpoint: subscription.endpoint,
-        keys: { p256dh: subscription.keys?.p256dh ?? '', auth: subscription.keys?.auth ?? '' },
-      };
-      try {
-        await client.sendNotification(recipient, JSON.stringify(notification), options);
-        return { kind: 'delivered' };
-      } catch (error) {
-        return isGoneSubscription(error) ? { kind: 'subscriptionGone' } : deliveryFailed(error);
-      }
-    },
-  };
-};
+): Pick<NotificationChannel, 'push'> => ({
+  push: async (subscription, notification) => {
+    const recipient = {
+      endpoint: subscription.endpoint,
+      keys: { p256dh: subscription.keys?.p256dh ?? '', auth: subscription.keys?.auth ?? '' },
+    };
+    try {
+      await client.sendNotification(recipient, JSON.stringify(notification), signedWith(keys, subject));
+      return { kind: 'delivered' };
+    } catch (error) {
+      return isGoneSubscription(error) ? { kind: 'subscriptionGone' } : deliveryFailed(error);
+    }
+  },
+});

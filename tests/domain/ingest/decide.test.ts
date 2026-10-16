@@ -203,6 +203,31 @@ describe("une annonce jamais vue d'une voiture inconnue", () => {
   });
 });
 
+describe('une annonce lue dans un email de baisses de prix ou de relance', () => {
+  it('une BMW Série 2 inconnue, lue dans un email La Centrale de baisses de prix, est laissée de côté : ce n’est pas une nouvelle annonce', () => {
+    // Given
+    const listing = lacentrale('BMW SERIE 2', { price: 62900, km: 45000, year: 2019 });
+
+    // When
+    const decision = decide(listing, { kind: 'newVehicle', location: LIBOURNE }, NOW, true);
+
+    // Then
+    expect(decision).toEqual({ kind: 'leftAside', listing });
+  });
+
+  it('la 911 déjà connue, revue dans un email de baisses de prix à 84 900 € : la baisse est enregistrée comme pour toute relecture', () => {
+    // Given
+    const stored = firstReading(leboncoin(LEBONCOIN_911_TITLE), PESSAC);
+    const listing = leboncoin('Porsche 911 Carrera S 2015 42 000 km 84 900 €');
+
+    // When
+    const decision = decide(listing, { kind: 'knownListing', ...stored }, NOW, true);
+
+    // Then
+    expect(decision).toMatchObject({ kind: 'priceChanged', from: 89900, to: 84900 });
+  });
+});
+
 describe('la même annonce relue avec un autre prix', () => {
   it('la 911 de Leboncoin relue à 84 900 € : la baisse est enregistrée sur l’annonce, le véhicule et l’historique, avec l’événement « 89900 → 84900 »', () => {
     // Given

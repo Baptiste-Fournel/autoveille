@@ -18,8 +18,8 @@ const NO_RUN: readonly SourceRunSummary[] = [];
 
 const fetchSite = async (dependencies: FetchHttpSitesDependencies, site: HttpSite): Promise<SourceRunSummary> => {
   const reading = await readSitePage(dependencies, site.url);
-  const matched = await ingestInTurn(dependencies, reading.listings);
-  const detail = reading.ok ? httpSitePassDetail(reading.detail, matched) : reading.detail;
+  const { newMatchedVehicles } = await ingestInTurn(dependencies, reading.listings, false);
+  const detail = reading.ok ? httpSitePassDetail(reading.detail, newMatchedVehicles) : reading.detail;
   dependencies.sourceRuns.record({ source: `http:${site.id}`, lastRunAt: dependencies.clock.now(), ok: reading.ok, detail });
   return { source: site.name, ok: reading.ok, detail };
 };
